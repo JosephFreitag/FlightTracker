@@ -266,6 +266,8 @@ function createMemberCardElement(member, allMembers, customFields) {
     card.innerHTML = headerHTML + bodyHTML;
     card.addEventListener('dragstart', handleDragStart);
     card.addEventListener('dragend', handleDragEnd);
+    card.addEventListener('dragover', handleTeamCardDragOver);
+    card.addEventListener('drop', handleDrop);
     card.addEventListener('click', handleCardActions);
 
     return card;
@@ -473,6 +475,17 @@ function getDraggableCard(event) {
     return event.target.closest('.member-card, .chart-card, .chart-card-supervisor');
 }
 
+function handleTeamCardDragOver(event) {
+    event.preventDefault();
+    if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = 'move';
+    }
+    const container = event.currentTarget.closest('.team-container');
+    if (container) {
+        container.classList.add('drag-over');
+    }
+}
+
 function handleDragStart(event) {
     const card = getDraggableCard(event);
     if (card && event.dataTransfer) {
@@ -515,7 +528,10 @@ async function handleFormSubmit(event) {
 
 async function handleDrop(event) {
     event.preventDefault();
-    const container = event.currentTarget;
+    const container = event.currentTarget.classList.contains('team-container')
+        ? event.currentTarget
+        : event.currentTarget.closest('.team-container');
+    if (!container) return;
     container.classList.remove('drag-over');
     const cardId = event.dataTransfer.getData('text/plain');
     const member = findMemberById(cardId, await getCachedMembers());
