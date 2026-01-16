@@ -476,44 +476,53 @@ function getDraggableCard(event) {
 }
 
 let activeDragImage = null;
+let dragGhostOffset = { x: 0, y: 0 };
+const transparentDragImage = document.createElement('canvas');
+transparentDragImage.width = 1;
+transparentDragImage.height = 1;
 
 function clearDragImage() {
     if (activeDragImage) {
         activeDragImage.remove();
         activeDragImage = null;
     }
+    dragGhostOffset = { x: 0, y: 0 };
+}
+
+function updateDragGhostPosition(event) {
+    if (!activeDragImage) return;
+    const x = event.clientX - dragGhostOffset.x;
+    const y = event.clientY - dragGhostOffset.y;
+    activeDragImage.style.transform = `translate(${x}px, ${y}px)`;
 }
 
 function setCustomDragImage(card, event) {
     if (!event.dataTransfer) return;
     clearDragImage();
-    const dragImage = card.cloneNode(true);
-    dragImage.classList.remove('expanded', 'dragging');
-    dragImage.classList.add('drag-preview');
-    if (dragImage.classList.contains('member-card')) {
-        const body = dragImage.querySelector('.card-body');
+    const rect = card.getBoundingClientRect();
+    const offsetX = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
+    const offsetY = Math.max(0, Math.min(rect.height, event.clientY - rect.top));
+    dragGhostOffset = { x: offsetX, y: offsetY };
+
+    const dragGhost = card.cloneNode(true);
+    dragGhost.classList.remove('expanded', 'dragging');
+    dragGhost.classList.add('drag-preview', 'drag-ghost');
+    if (dragGhost.classList.contains('member-card')) {
+        const body = dragGhost.querySelector('.card-body');
         if (body) {
             body.style.display = 'none';
             body.style.padding = '0';
             body.style.maxHeight = '0';
             body.style.overflow = 'hidden';
         }
-        dragImage.querySelectorAll('.context-menu.show').forEach(menu => menu.classList.remove('show'));
+        dragGhost.querySelectorAll('.context-menu.show').forEach(menu => menu.classList.remove('show'));
     }
-    dragImage.style.position = 'absolute';
-    dragImage.style.top = '-1000px';
-    dragImage.style.left = '-1000px';
-    dragImage.style.opacity = '1';
-    dragImage.style.pointerEvents = 'none';
-    dragImage.style.transform = 'none';
-    dragImage.style.width = `${card.offsetWidth}px`;
-    document.body.appendChild(dragImage);
-
-    const rect = card.getBoundingClientRect();
-    const offsetX = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
-    const offsetY = Math.max(0, Math.min(rect.height, event.clientY - rect.top));
-    event.dataTransfer.setDragImage(dragImage, offsetX, offsetY);
-    activeDragImage = dragImage;
+    dragGhost.style.width = `${card.offsetWidth}px`;
+    dragGhost.style.transform = 'translate(-9999px, -9999px)';
+    document.body.appendChild(dragGhost);
+    activeDragImage = dragGhost;
+    updateDragGhostPosition(event);
+    event.dataTransfer.setDragImage(transparentDragImage, 0, 0);
 }
 
 function handleTeamCardDragOver(event) {
@@ -920,6 +929,8 @@ document.addEventListener('click', function (event) {
         });
     }
 });
+
+document.addEventListener('dragover', updateDragGhostPosition);
 
 TEAM_CONTAINERS.forEach(id => {
     const container = document.getElementById(id);

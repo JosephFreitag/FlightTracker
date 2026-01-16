@@ -237,6 +237,17 @@ h1, h2 {
     outline: 2px solid #00A86B;
     outline-offset: 2px;
 }
+.drag-ghost {
+    position: fixed;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    z-index: 2000;
+    cursor: grabbing;
+    margin: 0;
+    opacity: 1;
+    will-change: transform;
+}
 /* Color Palette for Statuses */
 /* Transitional */
 .status-in_route { background-color: #4a90e2; color: #ffffff; }
