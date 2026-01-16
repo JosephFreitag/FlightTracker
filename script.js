@@ -489,6 +489,16 @@ function setCustomDragImage(card, event) {
     clearDragImage();
     const dragImage = card.cloneNode(true);
     dragImage.classList.remove('expanded', 'dragging');
+    if (dragImage.classList.contains('member-card')) {
+        const body = dragImage.querySelector('.card-body');
+        if (body) {
+            body.style.display = 'none';
+            body.style.padding = '0';
+            body.style.maxHeight = '0';
+            body.style.overflow = 'hidden';
+        }
+        dragImage.querySelectorAll('.context-menu.show').forEach(menu => menu.classList.remove('show'));
+    }
     dragImage.style.position = 'absolute';
     dragImage.style.top = '-1000px';
     dragImage.style.left = '-1000px';
@@ -496,7 +506,6 @@ function setCustomDragImage(card, event) {
     dragImage.style.pointerEvents = 'none';
     dragImage.style.transform = 'none';
     dragImage.style.width = `${card.offsetWidth}px`;
-    dragImage.style.height = `${card.offsetHeight}px`;
     document.body.appendChild(dragImage);
 
     const rect = card.getBoundingClientRect();
