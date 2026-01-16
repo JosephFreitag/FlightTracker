@@ -475,6 +475,37 @@ function getDraggableCard(event) {
     return event.target.closest('.member-card, .chart-card, .chart-card-supervisor');
 }
 
+let activeDragImage = null;
+
+function clearDragImage() {
+    if (activeDragImage) {
+        activeDragImage.remove();
+        activeDragImage = null;
+    }
+}
+
+function setCustomDragImage(card, event) {
+    if (!event.dataTransfer) return;
+    clearDragImage();
+    const dragImage = card.cloneNode(true);
+    dragImage.classList.remove('expanded', 'dragging');
+    dragImage.style.position = 'absolute';
+    dragImage.style.top = '-1000px';
+    dragImage.style.left = '-1000px';
+    dragImage.style.opacity = '1';
+    dragImage.style.pointerEvents = 'none';
+    dragImage.style.transform = 'none';
+    dragImage.style.width = `${card.offsetWidth}px`;
+    dragImage.style.height = `${card.offsetHeight}px`;
+    document.body.appendChild(dragImage);
+
+    const rect = card.getBoundingClientRect();
+    const offsetX = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
+    const offsetY = Math.max(0, Math.min(rect.height, event.clientY - rect.top));
+    event.dataTransfer.setDragImage(dragImage, offsetX, offsetY);
+    activeDragImage = dragImage;
+}
+
 function handleTeamCardDragOver(event) {
     event.preventDefault();
     if (event.dataTransfer) {
@@ -491,6 +522,7 @@ function handleDragStart(event) {
     if (card && event.dataTransfer) {
         event.dataTransfer.setData('text/plain', card.id);
         event.dataTransfer.effectAllowed = 'move';
+        setCustomDragImage(card, event);
         setTimeout(() => card.classList.add('dragging'), 0);
     }
 }
@@ -500,6 +532,7 @@ function handleDragEnd(event) {
     if (card) {
         card.classList.remove('dragging');
     }
+    clearDragImage();
 }
 
 async function handleFormSubmit(event) {
