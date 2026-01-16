@@ -469,16 +469,21 @@ async function handleFieldListClick(event) {
 
 
 // --- EVENT HANDLERS ---
+function getDraggableCard(event) {
+    return event.target.closest('.member-card, .chart-card, .chart-card-supervisor');
+}
+
 function handleDragStart(event) {
-    const card = event.target.closest('.member-card');
-    if (card) {
+    const card = getDraggableCard(event);
+    if (card && event.dataTransfer) {
         event.dataTransfer.setData('text/plain', card.id);
+        event.dataTransfer.effectAllowed = 'move';
         setTimeout(() => card.classList.add('dragging'), 0);
     }
 }
 
 function handleDragEnd(event) {
-    const card = event.target.closest('.member-card');
+    const card = getDraggableCard(event);
     if (card) {
         card.classList.remove('dragging');
     }
@@ -698,7 +703,10 @@ function renderSupervisionChart(allMembers) {
             return;
         }
         supervisionContainer.innerHTML = `<div class="chart-container"><ul class="chart-children">${roots.map(createChartNode).join('')}</ul></div>`;
-        supervisionContainer.querySelectorAll('[draggable="true"]').forEach(el => el.addEventListener('dragstart', handleDragStart));
+        supervisionContainer.querySelectorAll('[draggable="true"]').forEach(el => {
+            el.addEventListener('dragstart', handleDragStart);
+            el.addEventListener('dragend', handleDragEnd);
+        });
         supervisionContainer.querySelectorAll('li').forEach(el => {
             el.addEventListener('dragover', (e) => e.preventDefault());
             el.addEventListener('drop', handleChartDrop);
