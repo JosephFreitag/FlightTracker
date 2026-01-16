@@ -489,6 +489,7 @@ function setCustomDragImage(card, event) {
     clearDragImage();
     const dragImage = card.cloneNode(true);
     dragImage.classList.remove('expanded', 'dragging');
+    dragImage.classList.add('drag-preview');
     if (dragImage.classList.contains('member-card')) {
         const body = dragImage.querySelector('.card-body');
         if (body) {
