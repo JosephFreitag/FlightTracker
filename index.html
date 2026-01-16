@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flights Member Tracker (Firebase Edition)</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h1>Flights Member Tracker</h1>
+    <div class="header-controls">
+        <button id="add-member-btn">Add New Member</button>
+        <!-- ===== NEW: Button to manage custom fields ===== -->
+        <button id="manage-fields-btn">Manage Fields</button>
+    </div>
+    <!-- Tab Navigation -->
+    <div class="tab-nav">
+        <button class="tab-btn active" data-tab="team-overview">Team Overview</button>
+        <button class="tab-btn" data-tab="supervision-view">Supervision</button>
+    </div>
+    <!-- Main Content Area -->
+    <main id="main-content">
+        <div id="team-overview" class="tab-content active team-view-cards">
+            <h2 class="section-header">Inbound</h2>
+            <div id="inbound-container" class="team-container"></div>
+            <h2 class="section-header">Flight Leads</h2>
+            <div id="flight-leads-container" class="team-container"></div>
+            <div class="dual-team-container">
+                <div>
+                    <h2 class="section-header">BRASS</h2>
+                    <div id="brass-container" class="team-container"></div>
+                </div>
+                <div>
+                    <h2 class="section-header">SBIRS</h2>
+                    <div id="sbirs-container" class="team-container"></div>
+                </div>
+            </div>
+        </div>
+        <div id="supervision-view" class="tab-content">
+            <!-- This div will be populated by JavaScript -->
+        </div>
+    </main>
+    
+    <!-- ===== MODIFIED: Add Member Modal ===== -->
+    <div id="add-member-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h2 id="modal-title">Add New Member Details</h2>
+            <form id="add-member-form">
+                <input type="hidden" id="edit-row-id" name="rowId">
+                <fieldset>
+                    <legend>Member Details</legend>
+                    <div class="form-grid">
+                        <div><label for="firstName">First Name</label><input type="text" id="firstName" name="firstName"></div>
+                        <div><label for="lastName">Last Name</label><input type="text" id="lastName" name="lastName"></div>
+                        <div><label for="rank">Rank</label><select id="rank" name="rank">
+    <option value="" disabled selected>Select Rank...</option>
+    <option value="E-1">Airman Basic (E-1)</option>
+    <option value="E-2">Airman (E-2)</option>
+    <option value="E-3">Airman First Class (E-3)</option>
+    <option value="E-4">Senior Airman (E-4)</option>
+    <option value="E-5">Staff Sergeant (E-5)</option>
+    <option value="E-6">Technical Sergeant (E-6)</option>
+    <option value="E-7">Master Sergeant (E-7)</option>
+    <option value="E-8">Senior Master Sergeant (E-8)</option>
+    <!-- ADD THIS LINE -->
+    <option value="E-9">Chief Master Sergeant (E-9)</option>
+    <option value="O-1">Second Lieutenant (O-1)</option>
+    <option value="O-2">First Lieutenant (O-2)</option>
+    <option value="O-3">Captain (O-3)</option>
+    <option value="O-4">Major (O-4)</option>
+</select>
+</div>
+                        <div><label for="dutyTitle">Duty Title</label><select id="dutyTitle" name="dutyTitle"><option value="" disabled selected>Select Duty Title...</option><option value="Infrared Analyst">Infrared Analyst</option><option value="Senior Infrared Analyst">Senior Infrared Analyst</option><option value="Extractions Supervisor">Extractions Supervisor</option><option value="Section Chief">Section Chief</option><option value="Flight Chief">Flight Chief</option><option value="Flight Commander">Flight Commander</option></select></div>
+                        <div><label for="hometown">Hometown</label><input type="text" id="hometown" name="hometown"></div>
+                        <div><label for="medicalProfile">Medical Profile</label><select id="medicalProfile" name="medicalProfile"><option value="None" selected>None</option><option value="Permanent">Permanent</option></select></div>
+                    </div>
+                </fieldset>
+                
+                <!-- ===== NEW: Placeholder for dynamic custom fields ===== -->
+                <fieldset id="custom-fields-fieldset">
+                    <legend>Custom Data</legend>
+                    <div id="custom-fields-container" class="form-grid">
+                        <!-- Custom fields will be injected here by JavaScript -->
+                    </div>
+                </fieldset>
+
+                <fieldset>
+                    <legend>Promotion Data</legend>
+                    <div class="form-grid">
+                        <div><label for="tisDate">Time-in-Service Date</label><input type="date" id="tisDate" name="tisDate"></div>
+                        <div><label for="dorDate">Date of Rank</label><input type="date" id="dorDate" name="dorDate"></div>
+                    </div>
+                </fieldset>
+                <fieldset>
+                    <legend>Assignment</legend>
+                    <div class="form-grid">
+                        <div id="team-select-container">
+                            <label for="teamSelect">Team</label>
+                            <select id="teamSelect" name="teamSelect"><option value="" disabled selected>Select Team...</option><option value="inbound-container">Inbound</option><option value="flight-leads-container">Flight Leads</option><option value="brass-container">BRASS</option><option value="sbirs-container">SBIRS</option></select>
+                        </div>
+                        <div id="status-container">
+                            <label for="status">Status</label><select id="status" name="status"><option value="" disabled selected>Select Status...</option><option value="In-route">In-route</option><option value="Inprocessing">Inprocessing</option><option value="Warrior Ethos">Warrior Ethos</option><option value="IQT">IQT</option><option value="MQT">MQT</option><option value="OJT">OJT</option><option value="Certified">Certified</option><option value="QCer">QCer</option></select>
+                        </div>
+                    </div>
+                </fieldset>
+                <fieldset id="supervisor-fieldset">
+                    <legend>Supervisory Data</legend>
+                    <div class="form-grid">
+                        <div><label for="supervisor">Supervisor</label><select id="supervisor" name="supervisor"><option value="">(None)</option></select></div>
+                        <div><label for="supStartDate">Supervisory Start Date</label><input type="date" id="supStartDate" name="supStartDate"></div>
+                    </div>
+                </fieldset>
+                <button type="submit" id="modal-submit-btn">Add Member</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ===== NEW: Modal for Managing Custom Fields ===== -->
+    <div id="manage-fields-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h2>Manage Custom Fields</h2>
+            <div id="custom-fields-manager">
+                <fieldset>
+                    <legend>Add New Field</legend>
+                    <form id="add-field-form" class="form-grid">
+                        <div>
+                            <label for="new-field-name">Field Name</label>
+                            <input type="text" id="new-field-name" placeholder="e.g., 'Favorite Snack'" required>
+                        </div>
+                        <div>
+                            <label for="new-field-type">Field Type</label>
+                            <select id="new-field-type">
+                                <option value="text">Text</option>
+                                <option value="date">Date</option>
+                                <option value="number">Number</option>
+                            </select>
+                        </div>
+                        <button type="submit">Add Field</button>
+                    </form>
+                </fieldset>
+                <fieldset>
+                    <legend>Existing Fields</legend>
+                    <div id="existing-fields-list">
+                        <!-- List of existing fields will be populated here -->
+                    </div>
+                </fieldset>
+            </div>
+        </div>
+    </div>
+    <div id="detailed-view-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h2 id="detail-modal-title">Member Details</h2>
+            <div id="detailed-view-content">
+                <!-- Detailed member info will be populated here by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== CORRECTED SCRIPT LOADING ===== -->
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>
+    <script src="firebase-config.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
