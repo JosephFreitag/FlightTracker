@@ -242,11 +242,6 @@ function calculatePromotionDate(tisDate, dorDate, tisMonths, tigMonths) {
         }
     }
 
-    // Ensure we don't set a future date if they're already past it
-    if (promoDate && promoDate > today) {
-        promoDate = today;
-    }
-
     return promoDate.toISOString().slice(0, 10);
 }
 
