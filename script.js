@@ -152,6 +152,130 @@ async function deleteMember(memberData) {
     }
 }
 
+// --- AUTO-PROMOTION LOGIC ---
+
+async function checkAndProcessAutoPromotions(allMembers) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let promotionsProcessed = false;
+
+    for (const member of allMembers) {
+        if (!member.tisDate || !member.dorDate) continue;
+
+        const monthsTIS = getMonthsDifference(new Date(member.tisDate), today);
+        const monthsTIG = getMonthsDifference(new Date(member.dorDate), today);
+        let shouldPromote = false;
+        let newRank = null;
+        let newDorDate = null;
+
+        switch (member.rank) {
+            case 'E-1':
+                if (monthsTIS >= 6 && monthsTIG >= 6) {
+                    shouldPromote = true;
+                    newRank = 'E-2';
+                    newDorDate = calculatePromotionDate(member.tisDate, member.dorDate, 6, 6);
+                }
+                break;
+            case 'E-2':
+                if (monthsTIG >= 10) {
+                    shouldPromote = true;
+                    newRank = 'E-3';
+                    newDorDate = calculatePromotionDate(null, member.dorDate, null, 10);
+                }
+                break;
+            case 'E-3':
+                // For E-3, only auto-promote if they've been marked as not-selected for BTZ
+                // and they've reached the standard promotion date
+                if (member.btzStatus === 'not-selected') {
+                    const tisPathDate = new Date(member.tisDate);
+                    tisPathDate.setMonth(tisPathDate.getMonth() + 36);
+                    const tigPathDate = new Date(member.dorDate);
+                    tigPathDate.setMonth(tigPathDate.getMonth() + 28);
+                    const standardPromoDateRaw = (tisPathDate < tigPathDate) ? tisPathDate : tigPathDate;
+                    const standardPromoDate = new Date(standardPromoDateRaw);
+                    standardPromoDate.setDate(standardPromoDate.getDate() + 1);
+
+                    if (today >= standardPromoDate) {
+                        shouldPromote = true;
+                        newRank = 'E-4';
+                        newDorDate = standardPromoDate.toISOString().slice(0, 10);
+                    }
+                }
+                break;
+            case 'E-4':
+                if (monthsTIS >= 36 && monthsTIG >= 6) {
+                    shouldPromote = true;
+                    newRank = 'E-5';
+                    newDorDate = calculatePromotionDate(member.tisDate, member.dorDate, 36, 6);
+                }
+                break;
+            case 'E-5':
+                if (monthsTIS >= 60 && monthsTIG >= 23) {
+                    shouldPromote = true;
+                    newRank = 'E-6';
+                    newDorDate = calculatePromotionDate(member.tisDate, member.dorDate, 60, 23);
+                }
+                break;
+            case 'E-6':
+                if (monthsTIS >= 96 && monthsTIG >= 24) {
+                    shouldPromote = true;
+                    newRank = 'E-7';
+                    newDorDate = calculatePromotionDate(member.tisDate, member.dorDate, 96, 24);
+                }
+                break;
+            // E-7 to E-8 and E-8 to E-9 require board selection, so no auto-promotion
+        }
+
+        if (shouldPromote && newRank && newDorDate) {
+            member.rank = newRank;
+            member.dorDate = newDorDate;
+            await saveMember(member, true);
+            promotionsProcessed = true;
+        }
+    }
+
+    return promotionsProcessed;
+}
+
+function calculatePromotionDate(tisDate, dorDate, tisMonths, tigMonths) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let promoDate = null;
+
+    if (tisMonths !== null && tisDate) {
+        const tisPath = new Date(tisDate);
+        tisPath.setMonth(tisPath.getMonth() + tisMonths);
+        tisPath.setDate(tisPath.getDate() + 1); // Add 1 day to complete the period
+        promoDate = tisPath;
+    }
+
+    if (tigMonths !== null && dorDate) {
+        const tigPath = new Date(dorDate);
+        tigPath.setMonth(tigPath.getMonth() + tigMonths);
+        tigPath.setDate(tigPath.getDate() + 1); // Add 1 day to complete the period
+
+        // Use the later of TIS or TIG if both exist
+        if (promoDate && tigPath < promoDate) {
+            promoDate = promoDate;
+        } else {
+            promoDate = tigPath;
+        }
+    }
+
+    // Ensure we don't set a future date if they're already past it
+    if (promoDate && promoDate > today) {
+        promoDate = today;
+    }
+
+    return promoDate.toISOString().slice(0, 10);
+}
+
+function getMonthsDifference(d1, d2) {
+    if (!d1 || !d2) return 0;
+    return (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth());
+}
+
 // --- CACHING & HELPER FUNCTIONS ---
 
 let getMembersRequest = null;
@@ -186,6 +310,16 @@ async function renderAll(forceRefresh = false) {
         getCachedMembers(forceRefresh),
         getCachedFields(forceRefresh)
     ]);
+
+    // Check and process automatic promotions
+    const promotionsProcessed = await checkAndProcessAutoPromotions(allMembers);
+
+    // If promotions were processed, refresh the member list
+    if (promotionsProcessed) {
+        const updatedMembers = await getCachedMembers(true);
+        allMembers.length = 0;
+        allMembers.push(...updatedMembers);
+    }
 
     TEAM_CONTAINERS.forEach(id => {
         const container = document.getElementById(id);
@@ -802,10 +936,10 @@ function calculatePromotionEligibility(member) {
 
     switch (rank) {
         case 'E-1':
-            if (monthsTIS >= 6 && monthsTIG >= 6) return { status: "Eligible for E-2", note: "TIS/TIG met.", className: "eligible", showPromoteButton: true };
+            if (monthsTIS >= 6 && monthsTIG >= 6) return { status: "Auto-Promoted to E-2", note: "TIS/TIG met.", className: "eligible" };
             return { status: "Not Eligible", note: "Req: 6m TIS/TIG.", className: "not-eligible" };
         case 'E-2':
-            if (monthsTIG >= 10) return { status: "Eligible for E-3", note: "TIG met.", className: "eligible", showPromoteButton: true };
+            if (monthsTIG >= 10) return { status: "Auto-Promoted to E-3", note: "TIG met.", className: "eligible" };
             return { status: "Not Eligible", note: "Req: 10m TIG.", className: "not-eligible" };
         
         case 'E-3':
@@ -837,31 +971,33 @@ function calculatePromotionEligibility(member) {
             const boardQuarterValue = getQuarterValue(boardQuarter);
 
             if (btzStatus === 'not-selected') {
-                if (today >= standardPromoDate) return { status: "Eligible for E-4", note: "Standard TIS/TIG met.", className: "eligible", showPromoteButton: true };
-                return { status: "Not Selected for BTZ", note: `Eligible for SrA on ${standardPromoDate.toLocaleDateString()}`, className: "btz-not-selected" };
+                if (today >= standardPromoDate) return { status: "Auto-Promoted to E-4", note: "Standard TIS/TIG met.", className: "eligible" };
+                return { status: "Not Selected for BTZ", note: `Will auto-promote on ${standardPromoDate.toLocaleDateString()}`, className: "btz-not-selected" };
             }
 
             // New check for two quarters out (Yellow '!')
             if (boardQuarter.year === twoQuartersOut.year && boardQuarter.quarter === twoQuartersOut.quarter) {
                 return { status: `BTZ Board in 2 Quarters`, note: `Board for Q${boardQuarter.quarter} ${boardQuarter.year}`, className: "btz-two-q" };
             }
-            // Existing check for next quarter (Red '!')
+            // Check for next quarter (Red '!')
             if (boardQuarter.year === nextQuarter.year && boardQuarter.quarter === nextQuarter.quarter) {
                 return { status: `BTZ Board Next Quarter!`, note: `Board for Q${boardQuarter.quarter} ${boardQuarter.year}`, className: "btz-next-q" };
             }
-            
-            if (currentQuarterValue === boardQuarterValue) return { status: `In Q${boardQuarter.quarter} ${boardQuarter.year} BTZ Window`, note: "Board meets this quarter.", className: "btz-window" };
+            // Check if IN the board quarter (Red '!' - persistent until selection made)
+            if (currentQuarterValue === boardQuarterValue) {
+                return { status: `BTZ Board THIS Quarter!`, note: `Board for Q${boardQuarter.quarter} ${boardQuarter.year} - Make selection`, className: "btz-next-q" };
+            }
             if (currentQuarterValue > boardQuarterValue) return { status: "Board Concluded", note: `Board was Q${boardQuarter.quarter} ${boardQuarter.year}`, className: "board-concluded", btzPromoDate: btzPromoDate.toISOString().slice(0, 10) };
             return { status: "Not Eligible", note: `BTZ board: Q${boardQuarter.quarter} ${boardQuarter.year}`, className: "not-eligible" };
 
         case 'E-4':
-            if (monthsTIS >= 36 && monthsTIG >= 6) return { status: "Eligible for E-5", note: "TIS/TIG met for SSgt.", className: "eligible", showPromoteButton: true };
+            if (monthsTIS >= 36 && monthsTIG >= 6) return { status: "Auto-Promoted to E-5", note: "TIS/TIG met for SSgt.", className: "eligible" };
             return { status: "Not Eligible", note: "Req: 36m TIS & 6m TIG.", className: "not-eligible" };
         case 'E-5':
-            if (monthsTIS >= 60 && monthsTIG >= 23) return { status: "Eligible for E-6", note: "TIS/TIG met for TSgt.", className: "eligible", showPromoteButton: true };
+            if (monthsTIS >= 60 && monthsTIG >= 23) return { status: "Auto-Promoted to E-6", note: "TIS/TIG met for TSgt.", className: "eligible" };
             return { status: "Not Eligible", note: "Req: 60m TIS & 23m TIG.", className: "not-eligible" };
         case 'E-6':
-            if (monthsTIS >= 96 && monthsTIG >= 24) return { status: "Eligible for E-7", note: "TIS/TIG met for MSgt.", className: "eligible", showPromoteButton: true };
+            if (monthsTIS >= 96 && monthsTIG >= 24) return { status: "Auto-Promoted to E-7", note: "TIS/TIG met for MSgt.", className: "eligible" };
             return { status: "Not Eligible", note: "Req: 96m TIS & 24m TIG.", className: "not-eligible" };
         case 'E-7':
             if (monthsTIS >= 132 && monthsTIG >= 20) return { status: "Board Eligible for E-8", note: "TIS/TIG met for SMSgt board.", className: "eligible", showPromoteButton: true };
@@ -890,11 +1026,6 @@ function getPreviousQuarterInfo(q) {
 
 function getNextQuarterInfo(q) {
     return q.quarter === 4 ? { quarter: 1, year: q.year + 1 } : { quarter: q.quarter + 1, year: q.year };
-}
-
-function getMonthsDifference(d1, d2) {
-    if (!d1 || !d2) return 0;
-    return (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth());
 }
 
 // --- GLOBAL EVENT LISTENERS ---
