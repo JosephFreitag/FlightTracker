@@ -342,7 +342,7 @@ function createMemberCardElement(member, allMembers, customFields) {
     const promoteButtonHTML = eligibility.showPromoteButton ? `<button class="action-btn promote-btn" title="Promote Member">⬆️</button>` : '';
 
     let eligibilityHTML = `${eligibility.status}${promoteButtonHTML}<span class="eligibility-note">${eligibility.note}</span>`;
-    if (eligibility.className === 'board-concluded') {
+    if (eligibility.className === 'board-concluded' || eligibility.className === 'btz-this-q') {
         eligibilityHTML += `<br><button class="btz-action-btn" data-action="selected" data-new-dor="${eligibility.btzPromoDate}">Selected</button><button class="btz-action-btn" data-action="not-selected">Not Selected</button>`;
     }
     
@@ -351,7 +351,7 @@ function createMemberCardElement(member, allMembers, customFields) {
 
     // === ALERT ICON LOGIC UPDATED HERE ===
     let alertHTML = '';
-    if (eligibility.className === 'btz-next-q') {
+    if (eligibility.className === 'btz-next-q' || eligibility.className === 'btz-this-q') {
         alertHTML = `<div class="alert-icon" title="BTZ Board Next Quarter">!</div>`;
     } else if (eligibility.className === 'btz-two-q') {
         alertHTML = `<div class="alert-icon-warning" title="BTZ Board in 2 Quarters">!</div>`;
@@ -959,7 +959,7 @@ function calculatePromotionEligibility(member) {
             }
             // Check if IN the board quarter (Red '!' - persistent until selection made)
             if (currentQuarterValue === boardQuarterValue) {
-                return { status: `BTZ Board THIS Quarter!`, note: `Board for Q${boardQuarter.quarter} ${boardQuarter.year} - Make selection`, className: "btz-next-q" };
+                return { status: `BTZ Board THIS Quarter!`, note: `Board for Q${boardQuarter.quarter} ${boardQuarter.year} - Make selection`, className: "btz-this-q", btzPromoDate: btzPromoDate.toISOString().slice(0, 10) };
             }
             if (currentQuarterValue > boardQuarterValue) return { status: "Board Concluded", note: `Board was Q${boardQuarter.quarter} ${boardQuarter.year}`, className: "board-concluded", btzPromoDate: btzPromoDate.toISOString().slice(0, 10) };
             return { status: "Not Eligible", note: `BTZ board: Q${boardQuarter.quarter} ${boardQuarter.year}`, className: "not-eligible" };
