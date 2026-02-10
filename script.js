@@ -21,6 +21,8 @@ const detailedViewModal = document.getElementById('detailed-view-modal');
 
 let ALL_MEMBERS_CACHE = [];
 let CUSTOM_FIELDS_CACHE = [];
+let FLIGHTS_CACHE = [];
+let activeFlightId = null;
 
 // --- DATA FUNCTIONS ---
 
@@ -62,6 +64,40 @@ async function saveCustomFields(fields) {
         console.error("Error saving custom fields:", error);
         alert("There was an error saving the custom fields. Please try again.");
     }
+}
+
+async function getFlights() {
+    try {
+        const snapshot = await database.ref('/_config/flights').get();
+        if (!snapshot.exists()) return [];
+        const value = snapshot.val();
+        if (Array.isArray(value)) return value;
+        if (typeof value === 'object' && value !== null) return Object.values(value);
+        return [];
+    } catch (error) {
+        console.error("Error fetching flights:", error);
+        return [];
+    }
+}
+
+async function saveFlights(flights) {
+    try {
+        await database.ref('/_config/flights').set(flights);
+        FLIGHTS_CACHE = flights;
+    } catch (error) {
+        console.error("Error saving flights:", error);
+        alert("There was an error saving flights. Please try again.");
+    }
+}
+
+let getFlightsRequest = null;
+async function getCachedFlights(forceRefresh = false) {
+    if (FLIGHTS_CACHE.length > 0 && !forceRefresh) return FLIGHTS_CACHE;
+    if (!getFlightsRequest) {
+        getFlightsRequest = getFlights().finally(() => { getFlightsRequest = null; });
+    }
+    FLIGHTS_CACHE = await getFlightsRequest;
+    return FLIGHTS_CACHE;
 }
 
 async function getAllMembers() {
@@ -160,6 +196,24 @@ async function checkAndProcessAutoPromotions(allMembers) {
     let promotionsProcessed = false;
 
     for (const member of allMembers) {
+        // Check for scheduled promotions (selected members with a set promotion date)
+        if (member.promotionStatus === 'selected' && member.promotionDate) {
+            const promoDate = new Date(member.promotionDate);
+            promoDate.setHours(0, 0, 0, 0);
+            if (today >= promoDate) {
+                const currentRankIndex = PROMOTION_SEQUENCE.indexOf(member.rank);
+                if (currentRankIndex > -1 && currentRankIndex < PROMOTION_SEQUENCE.length - 1) {
+                    member.rank = PROMOTION_SEQUENCE[currentRankIndex + 1];
+                    member.dorDate = member.promotionDate;
+                    member.promotionDate = '';
+                    member.promotionStatus = '';
+                    await saveMember(member, true);
+                    promotionsProcessed = true;
+                    continue;
+                }
+            }
+        }
+
         if (!member.tisDate || !member.dorDate) continue;
 
         const monthsTIS = getMonthsDifference(new Date(member.tisDate), today);
@@ -280,10 +334,39 @@ function findMemberById(id, memberList) {
 // --- RENDERING & UI FUNCTIONS ---
 
 async function renderAll(forceRefresh = false) {
-    const [allMembers, customFields] = await Promise.all([
+    const [allMembers, customFields, flights] = await Promise.all([
         getCachedMembers(forceRefresh),
-        getCachedFields(forceRefresh)
+        getCachedFields(forceRefresh),
+        getCachedFlights(forceRefresh)
     ]);
+
+    // Auto-create default flight if none exist and there are members
+    if (flights.length === 0 && allMembers.length > 0) {
+        const defaultFlight = { id: `flight_${Date.now()}`, name: 'GSPS' };
+        flights.push(defaultFlight);
+        await saveFlights(flights);
+        // Assign all existing members to this flight
+        for (const member of allMembers) {
+            if (!member.flight) {
+                member.flight = defaultFlight.id;
+                await saveMember(member, true);
+            }
+        }
+        const updatedMembers = await getCachedMembers(true);
+        allMembers.length = 0;
+        allMembers.push(...updatedMembers);
+    }
+
+    // Set active flight if not set
+    if (!activeFlightId && flights.length > 0) {
+        activeFlightId = flights[0].id;
+    }
+
+    // Render flight tabs
+    renderFlightTabs(flights);
+
+    // Update flight dropdown in form
+    updateFlightDropdown(flights);
 
     // Check and process automatic promotions
     const promotionsProcessed = await checkAndProcessAutoPromotions(allMembers);
@@ -295,29 +378,194 @@ async function renderAll(forceRefresh = false) {
         allMembers.push(...updatedMembers);
     }
 
-    TEAM_CONTAINERS.forEach(id => {
-        const container = document.getElementById(id);
-        if (container) container.innerHTML = '';
-    });
+    const subTabNav = document.getElementById('sub-tab-nav');
+    const unbilletedView = document.getElementById('unbilleted-view');
+    const teamOverview = document.getElementById('team-overview');
+    const supervisionView = document.getElementById('supervision-view');
 
-    if (Array.isArray(allMembers)) {
-        allMembers.sort((a, b) => (RANK_ORDER[b.rank] || 0) - (RANK_ORDER[a.rank] || 0) || a.lastName.localeCompare(b.lastName));
+    if (activeFlightId === 'unbilleted') {
+        // Show unbilleted view, hide sub-tabs
+        subTabNav.style.display = 'none';
+        teamOverview.classList.remove('active');
+        supervisionView.classList.remove('active');
+        unbilletedView.classList.add('active');
+        renderUnbilletedView(allMembers, flights, customFields);
+    } else {
+        // Show sub-tabs, hide unbilleted
+        subTabNav.style.display = 'flex';
+        unbilletedView.classList.remove('active');
 
-        for (const member of allMembers) {
-            if (member && member.teamSelect) {
-                const container = document.getElementById(member.teamSelect);
-                if (container) {
-                    container.appendChild(createMemberCardElement(member, allMembers, customFields));
+        // Filter members for active flight
+        const flightMembers = allMembers.filter(m => m.flight === activeFlightId);
+
+        TEAM_CONTAINERS.forEach(id => {
+            const container = document.getElementById(id);
+            if (container) container.innerHTML = '';
+        });
+
+        if (Array.isArray(flightMembers)) {
+            flightMembers.sort((a, b) => (RANK_ORDER[b.rank] || 0) - (RANK_ORDER[a.rank] || 0) || a.lastName.localeCompare(b.lastName));
+
+            for (const member of flightMembers) {
+                if (member && member.teamSelect) {
+                    const container = document.getElementById(member.teamSelect);
+                    if (container) {
+                        container.appendChild(createMemberCardElement(member, allMembers, customFields));
+                    }
                 }
             }
+        }
+
+        const activeTab = document.querySelector('.tab-btn.active');
+        if (activeTab && activeTab.dataset.tab === 'team-overview') {
+            teamOverview.classList.add('active');
+            supervisionView.classList.remove('active');
+        } else if (activeTab && activeTab.dataset.tab === 'supervision-view') {
+            teamOverview.classList.remove('active');
+            supervisionView.classList.add('active');
+            renderSupervisionChart(flightMembers);
         }
     }
 
     await updateSupervisorDropdown(allMembers);
-    const activeTab = document.querySelector('.tab-btn.active');
-    if (activeTab && activeTab.dataset.tab === 'supervision-view') {
-        renderSupervisionChart(allMembers);
+}
+
+function renderFlightTabs(flights) {
+    const nav = document.getElementById('flight-tab-nav');
+    nav.innerHTML = '';
+
+    flights.forEach(flight => {
+        const btn = document.createElement('button');
+        btn.className = 'flight-tab' + (activeFlightId === flight.id ? ' active' : '');
+        btn.dataset.flightId = flight.id;
+        btn.textContent = flight.name;
+        btn.addEventListener('click', () => {
+            activeFlightId = flight.id;
+            renderAll();
+        });
+        // Right-click to delete flight
+        btn.addEventListener('contextmenu', async (e) => {
+            e.preventDefault();
+            if (confirm(`Delete flight "${flight.name}"? Members will become unbilleted.`)) {
+                // Unbillet all members in this flight
+                const allMembers = await getCachedMembers();
+                for (const member of allMembers) {
+                    if (member.flight === flight.id) {
+                        member.flight = '';
+                        await saveMember(member, true);
+                    }
+                }
+                const updatedFlights = FLIGHTS_CACHE.filter(f => f.id !== flight.id);
+                await saveFlights(updatedFlights);
+                activeFlightId = updatedFlights.length > 0 ? updatedFlights[0].id : 'unbilleted';
+                await renderAll(true);
+            }
+        });
+        nav.appendChild(btn);
+    });
+
+    // Add "+" button
+    const addBtn = document.createElement('button');
+    addBtn.className = 'flight-tab add-flight-btn';
+    addBtn.textContent = '+';
+    addBtn.title = 'Add New Flight';
+    addBtn.addEventListener('click', async () => {
+        const name = prompt("Enter flight name:");
+        if (!name || !name.trim()) return;
+        const newFlight = { id: `flight_${Date.now()}`, name: name.trim() };
+        const updatedFlights = [...FLIGHTS_CACHE, newFlight];
+        await saveFlights(updatedFlights);
+        activeFlightId = newFlight.id;
+        await renderAll(true);
+    });
+    nav.appendChild(addBtn);
+
+    // Add "Unbilleted" tab
+    const unbilletedBtn = document.createElement('button');
+    unbilletedBtn.className = 'flight-tab unbilleted-tab' + (activeFlightId === 'unbilleted' ? ' active' : '');
+    unbilletedBtn.textContent = 'Unbilleted';
+    unbilletedBtn.addEventListener('click', () => {
+        activeFlightId = 'unbilleted';
+        renderAll();
+    });
+    nav.appendChild(unbilletedBtn);
+}
+
+function renderUnbilletedView(allMembers, flights, customFields) {
+    const container = document.getElementById('unbilleted-view');
+    const unbilletedMembers = allMembers.filter(m => !m.flight);
+
+    let html = '<div class="unbilleted-layout">';
+
+    // Members list
+    html += '<div class="unbilleted-members-section"><h2 class="section-header">Unassigned Members</h2>';
+    if (unbilletedMembers.length === 0) {
+        html += '<p style="color: #bdc3c7; padding: 15px;">All members are assigned to a flight.</p>';
+    } else {
+        html += '<div class="unbilleted-members-list">';
+        unbilletedMembers.sort((a, b) => (RANK_ORDER[b.rank] || 0) - (RANK_ORDER[a.rank] || 0) || a.lastName.localeCompare(b.lastName));
+        unbilletedMembers.forEach(member => {
+            const rankDisplay = RANK_ABBREVIATIONS[member.rank] || member.rank;
+            html += `<div class="unbilleted-card" draggable="true" data-member-id="${member.rowId}"><span class="unbilleted-card-name">${rankDisplay} ${member.lastName}, ${member.firstName}</span><span class="unbilleted-card-duty">${member.dutyTitle || ''}</span></div>`;
+        });
+        html += '</div>';
     }
+    html += '</div>';
+
+    // Flight drop zones
+    html += '<div class="flight-drop-zones-section"><h2 class="section-header">Assign to Flight</h2>';
+    html += '<div class="flight-drop-zones">';
+    flights.forEach(flight => {
+        const flightMembers = allMembers.filter(m => m.flight === flight.id);
+        html += `<div class="flight-drop-zone" data-flight-id="${flight.id}"><div class="flight-drop-zone-title">${flight.name}</div><div class="flight-drop-zone-count">${flightMembers.length} member${flightMembers.length !== 1 ? 's' : ''}</div></div>`;
+    });
+    html += '</div></div>';
+
+    html += '</div>';
+    container.innerHTML = html;
+
+    // Add drag-and-drop handlers for unbilleted cards
+    container.querySelectorAll('.unbilleted-card').forEach(card => {
+        card.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('text/plain', card.dataset.memberId);
+            e.dataTransfer.effectAllowed = 'move';
+            setTimeout(() => card.classList.add('dragging'), 0);
+        });
+        card.addEventListener('dragend', () => card.classList.remove('dragging'));
+    });
+
+    // Add drop handlers for flight zones
+    container.querySelectorAll('.flight-drop-zone').forEach(zone => {
+        zone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            zone.classList.add('drag-over');
+        });
+        zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+        zone.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            zone.classList.remove('drag-over');
+            const memberId = e.dataTransfer.getData('text/plain');
+            const member = findMemberById(memberId, ALL_MEMBERS_CACHE);
+            if (member) {
+                member.flight = zone.dataset.flightId;
+                await saveMember(member, true);
+                await renderAll(true);
+            }
+        });
+    });
+}
+
+function updateFlightDropdown(flights) {
+    const select = document.getElementById('flight');
+    if (!select) return;
+    const currentValue = select.value;
+    select.innerHTML = '<option value="">Unbilleted</option>';
+    flights.forEach(flight => {
+        const option = new Option(flight.name, flight.id);
+        select.add(option);
+    });
+    select.value = currentValue;
 }
 
 function createMemberCardElement(member, allMembers, customFields) {
@@ -331,7 +579,18 @@ function createMemberCardElement(member, allMembers, customFields) {
     const dutyTitleSubtitle = `<span class="card-subtitle">${member.dutyTitle || 'N/A'}</span>`;
     
     const promotionTagHTML = eligibility.showPromoteButton ? `<span class="promotion-tag" title="Promotion Eligible">P</span>` : '';
-    
+
+    let promoSoonHTML = '';
+    if (member.promotionDate) {
+        const promoDate = new Date(member.promotionDate);
+        const todayCheck = new Date();
+        todayCheck.setHours(0, 0, 0, 0);
+        const daysUntil = Math.ceil((promoDate - todayCheck) / (1000 * 60 * 60 * 24));
+        if (daysUntil >= 0 && daysUntil <= 14) {
+            promoSoonHTML = `<span class="promo-soon-tag" title="Promotion in ${daysUntil} days">Promo Soon!</span>`;
+        }
+    }
+
     let statusTagHTML = '';
     if (member.dutyTitle !== 'Flight Chief' && member.dutyTitle !== 'Flight Commander') {
         const statusSlug = (member.status || 'unknown').toLowerCase().replace(/[\s-]/g, '_');
@@ -345,6 +604,12 @@ function createMemberCardElement(member, allMembers, customFields) {
     if (eligibility.className === 'board-concluded' || eligibility.className === 'btz-this-q') {
         eligibilityHTML += `<br><button class="btz-action-btn" data-action="selected" data-new-dor="${eligibility.btzPromoDate}">Selected</button><button class="btz-action-btn" data-action="not-selected">Not Selected</button>`;
     }
+    if (eligibility.className === 'promo-eligible') {
+        eligibilityHTML += `<br><button class="selection-btn" data-action="selected">Selected</button><button class="selection-btn" data-action="not-selected">Not Selected</button>`;
+    }
+    if (eligibility.className === 'promo-selected') {
+        eligibilityHTML += `<br><button class="selection-btn edit-promo-date-btn">Edit Date</button>`;
+    }
     
     const supervisor = findMemberById(member.supervisor, allMembers);
     const supervisorName = supervisor ? `${RANK_ABBREVIATIONS[supervisor.rank] || supervisor.rank} ${supervisor.lastName}` : 'N/A';
@@ -357,7 +622,7 @@ function createMemberCardElement(member, allMembers, customFields) {
         alertHTML = `<div class="alert-icon-warning" title="BTZ Board in 2 Quarters">!</div>`;
     }
     
-    const headerHTML = `<div class="card-header">${alertHTML}<div class="title-block"><span class="card-title">${rankDisplay} ${member.lastName}, ${member.firstName}</span>${dutyTitleSubtitle}</div>${statusTagHTML}${medicalTagHTML}${promotionTagHTML}<div class="hamburger-menu">☰</div><div class="context-menu"><button class="context-btn detail-btn">Detailed View</button><button class="context-btn modify-btn">Modify</button><button class="context-btn delete-btn">Delete</button></div></div>`;
+    const headerHTML = `<div class="card-header">${alertHTML}<div class="title-block"><span class="card-title">${rankDisplay} ${member.lastName}, ${member.firstName}</span>${dutyTitleSubtitle}</div>${statusTagHTML}${medicalTagHTML}${promoSoonHTML}${promotionTagHTML}<div class="hamburger-menu">☰</div><div class="context-menu"><button class="context-btn detail-btn">Detailed View</button><button class="context-btn modify-btn">Modify</button><button class="context-btn delete-btn">Delete</button></div></div>`;
     
     const gridItems = [];
     if (member.dutyTitle !== 'Flight Chief' && member.dutyTitle !== 'Flight Commander') gridItems.push(`<strong>Status:</strong><span>${member.status || 'N/A'}</span>`);
@@ -402,6 +667,11 @@ async function openAddModal() {
     await updateSupervisorDropdown();
     renderCustomFieldsOnForm();
     handleAssignmentChange();
+    // Default flight to active flight
+    const flightSelect = document.getElementById('flight');
+    if (flightSelect && activeFlightId && activeFlightId !== 'unbilleted') {
+        flightSelect.value = activeFlightId;
+    }
     memberModal.style.display = 'block';
 }
 
@@ -465,6 +735,10 @@ async function openDetailModal(memberId) {
     const supervisor = findMemberById(member.supervisor, ALL_MEMBERS_CACHE);
     const supervisorName = supervisor ? `${RANK_ABBREVIATIONS[supervisor.rank] || ''} ${supervisor.lastName}` : 'N/A';
 
+    const flightObj = FLIGHTS_CACHE.find(f => f.id === member.flight);
+    const flightName = flightObj ? flightObj.name : 'Unbilleted';
+
+    details.push(`<strong>Flight:</strong><span>${flightName}</span>`);
     details.push(`<strong>Duty Title:</strong><span>${member.dutyTitle || 'N/A'}</span>`);
     details.push(`<strong>Team:</strong><span>${member.teamSelect?.replace('-container', '') || 'N/A'}</span>`);
     details.push(`<strong>Status:</strong><span>${member.status || 'N/A'}</span>`);
@@ -473,6 +747,9 @@ async function openDetailModal(memberId) {
     details.push(`<strong>Date of Rank:</strong><span>${member.dorDate || 'N/A'}</span>`);
     details.push(`<strong>Hometown:</strong><span>${member.hometown || 'N/A'}</span>`);
     details.push(`<strong>Medical:</strong><span>${member.medicalProfile || 'N/A'}</span>`);
+    if (member.promotionDate) {
+        details.push(`<strong>Promotion Date:</strong><span>${member.promotionDate}</span>`);
+    }
 
     if (member.customData && CUSTOM_FIELDS_CACHE) {
         CUSTOM_FIELDS_CACHE.forEach(field => {
@@ -783,6 +1060,35 @@ async function handleCardActions(event) {
         return; 
     }
     
+    if (target.matches('.selection-btn')) {
+        const memberData = findMemberById(card.id, ALL_MEMBERS_CACHE);
+        if (!memberData) return;
+
+        if (target.dataset.action === 'selected') {
+            const promoDate = prompt("Enter Promotion Date (YYYY-MM-DD):", "");
+            if (!promoDate || !/^\d{4}-\d{2}-\d{2}$/.test(promoDate)) {
+                alert("Invalid date format.");
+                return;
+            }
+            memberData.promotionStatus = 'selected';
+            memberData.promotionDate = promoDate;
+        } else if (target.dataset.action === 'not-selected') {
+            memberData.promotionStatus = 'not-selected';
+            memberData.promotionDate = '';
+        } else if (target.classList.contains('edit-promo-date-btn')) {
+            const newDate = prompt("Edit Promotion Date (YYYY-MM-DD):", memberData.promotionDate || "");
+            if (!newDate || !/^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
+                alert("Invalid date format.");
+                return;
+            }
+            memberData.promotionDate = newDate;
+        }
+
+        await saveMember(memberData, true);
+        await renderAll(true);
+        return;
+    }
+
     if (target.matches('.promote-btn') || target.matches('.btz-action-btn')) {
         const memberData = findMemberById(card.id, ALL_MEMBERS_CACHE);
         if(!memberData) return;
@@ -965,19 +1271,49 @@ function calculatePromotionEligibility(member) {
             return { status: "Not Eligible", note: `BTZ board: Q${boardQuarter.quarter} ${boardQuarter.year}`, className: "not-eligible" };
 
         case 'E-4':
-            if (monthsTIS >= 36 && monthsTIG >= 6) return { status: "Board Eligible for E-5", note: "TIS/TIG met for SSgt board.", className: "eligible", showPromoteButton: true };
+            if (member.promotionStatus === 'selected' && member.promotionDate) {
+                return { status: "Selected for E-5", note: `Promotes: ${member.promotionDate}`, className: "promo-selected" };
+            }
+            if (member.promotionStatus === 'not-selected') {
+                return { status: "Not Selected for E-5", note: "Can compete next cycle.", className: "promo-not-selected" };
+            }
+            if (monthsTIS >= 36 && monthsTIG >= 6) return { status: "Board Eligible for E-5", note: "TIS/TIG met for SSgt board.", className: "promo-eligible" };
             return { status: "Not Eligible", note: "Req: 36m TIS & 6m TIG.", className: "not-eligible" };
         case 'E-5':
-            if (monthsTIS >= 60 && monthsTIG >= 23) return { status: "Board Eligible for E-6", note: "TIS/TIG met for TSgt board.", className: "eligible", showPromoteButton: true };
+            if (member.promotionStatus === 'selected' && member.promotionDate) {
+                return { status: "Selected for E-6", note: `Promotes: ${member.promotionDate}`, className: "promo-selected" };
+            }
+            if (member.promotionStatus === 'not-selected') {
+                return { status: "Not Selected for E-6", note: "Can compete next cycle.", className: "promo-not-selected" };
+            }
+            if (monthsTIS >= 60 && monthsTIG >= 23) return { status: "Board Eligible for E-6", note: "TIS/TIG met for TSgt board.", className: "promo-eligible" };
             return { status: "Not Eligible", note: "Req: 60m TIS & 23m TIG.", className: "not-eligible" };
         case 'E-6':
-            if (monthsTIS >= 96 && monthsTIG >= 24) return { status: "Board Eligible for E-7", note: "TIS/TIG met for MSgt board.", className: "eligible", showPromoteButton: true };
+            if (member.promotionStatus === 'selected' && member.promotionDate) {
+                return { status: "Selected for E-7", note: `Promotes: ${member.promotionDate}`, className: "promo-selected" };
+            }
+            if (member.promotionStatus === 'not-selected') {
+                return { status: "Not Selected for E-7", note: "Can compete next cycle.", className: "promo-not-selected" };
+            }
+            if (monthsTIS >= 96 && monthsTIG >= 24) return { status: "Board Eligible for E-7", note: "TIS/TIG met for MSgt board.", className: "promo-eligible" };
             return { status: "Not Eligible", note: "Req: 96m TIS & 24m TIG.", className: "not-eligible" };
         case 'E-7':
-            if (monthsTIS >= 132 && monthsTIG >= 20) return { status: "Board Eligible for E-8", note: "TIS/TIG met for SMSgt board.", className: "eligible", showPromoteButton: true };
+            if (member.promotionStatus === 'selected' && member.promotionDate) {
+                return { status: "Selected for E-8", note: `Promotes: ${member.promotionDate}`, className: "promo-selected" };
+            }
+            if (member.promotionStatus === 'not-selected') {
+                return { status: "Not Selected for E-8", note: "Can compete next cycle.", className: "promo-not-selected" };
+            }
+            if (monthsTIS >= 132 && monthsTIG >= 20) return { status: "Board Eligible for E-8", note: "TIS/TIG met for SMSgt board.", className: "promo-eligible" };
             return { status: "Not Eligible", note: "Req: 132m TIS & 20m TIG.", className: "not-eligible" };
         case 'E-8':
-            if (monthsTIS >= 168 && monthsTIG >= 21) return { status: "Board Eligible for E-9", note: "TIS/TIG met for CMSgt board.", className: "eligible", showPromoteButton: true };
+            if (member.promotionStatus === 'selected' && member.promotionDate) {
+                return { status: "Selected for E-9", note: `Promotes: ${member.promotionDate}`, className: "promo-selected" };
+            }
+            if (member.promotionStatus === 'not-selected') {
+                return { status: "Not Selected for E-9", note: "Can compete next cycle.", className: "promo-not-selected" };
+            }
+            if (monthsTIS >= 168 && monthsTIG >= 21) return { status: "Board Eligible for E-9", note: "TIS/TIG met for CMSgt board.", className: "promo-eligible" };
             return { status: "Not Eligible", note: "Req: 168m TIS & 21m TIG.", className: "not-eligible" };
         case 'E-9':
             return { status: "Chief!", note: "Highest enlisted rank.", className: "manual-review" };
@@ -1016,23 +1352,25 @@ document.getElementById('existing-fields-list').addEventListener('click', handle
 
 detailedViewModal.querySelector('.close-btn').addEventListener('click', () => detailedViewModal.style.display = 'none');
 
-document.querySelector('.tab-nav').addEventListener('click', async (event) => {
+document.getElementById('sub-tab-nav').addEventListener('click', async (event) => {
     if (!event.target.matches('.tab-btn')) return;
 
     const tabId = event.target.dataset.tab;
 
-    // Hide all tabs and content, then show the active one
-    document.querySelectorAll('.tab-btn, .tab-content').forEach(el => el.classList.remove('active'));
+    // Update sub-tab active states
+    document.querySelectorAll('#sub-tab-nav .tab-btn').forEach(el => el.classList.remove('active'));
     event.target.classList.add('active');
+
+    // Hide all main tab content, then show the active one
+    document.querySelectorAll('#main-content > .tab-content').forEach(el => el.classList.remove('active'));
     const activeContent = document.getElementById(tabId);
     activeContent.classList.add('active');
 
-    // Specifically handle rendering for the supervision view
+    // Render supervision chart if needed
     if (tabId === 'supervision-view') {
-        // Use the members already in the cache to render the chart instantly.
-        // The getCachedMembers function will fetch them if the cache is empty.
         const allMembers = await getCachedMembers();
-        renderSupervisionChart(allMembers);
+        const flightMembers = allMembers.filter(m => m.flight === activeFlightId);
+        renderSupervisionChart(flightMembers);
     }
 });
 
