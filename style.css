@@ -224,7 +224,19 @@ h1, h2 {
 .chart-card-supervisor { border-color: #00A86B; }
 .chart-card-name { font-weight: bold; color: #ecf0f1; }
 .chart-card-title { font-size: 0.9em; color: #bdc3c7; }
-.chart-card.dragging, .chart-card-supervisor.dragging { opacity: 0.5; }
+.chart-card.dragging,
+.chart-card-supervisor.dragging {
+    opacity: 1;
+    box-shadow: 0 12px 24px rgba(0,0,0,0.55);
+    outline: 2px solid #00A86B;
+    outline-offset: 2px;
+    transform: translateY(-2px);
+}
+.drag-preview {
+    box-shadow: 0 12px 24px rgba(0,0,0,0.55);
+    outline: 2px solid #00A86B;
+    outline-offset: 2px;
+}
 /* Color Palette for Statuses */
 /* Transitional */
 .status-in_route { background-color: #4a90e2; color: #ffffff; }
@@ -250,8 +262,11 @@ h1, h2 {
 }
 /* --- NEW: Drag & Drop Styles --- */
 .member-card.dragging {
-    opacity: 0.4;
+    opacity: 1;
     cursor: grabbing;
+    box-shadow: 0 12px 24px rgba(0,0,0,0.55);
+    border-color: #00A86B;
+    transform: translateY(-2px);
 }
 .team-container.drag-over {
     background-color: rgba(0, 168, 107, 0.1); /* Subtle Jade highlight */

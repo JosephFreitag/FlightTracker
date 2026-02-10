@@ -54,6 +54,16 @@ async function getCustomFields() {
     }
 }
 
+async function saveCustomFields(fields) {
+    try {
+        await database.ref('/_config/customFields').set(fields);
+        CUSTOM_FIELDS_CACHE = fields;
+    } catch (error) {
+        console.error("Error saving custom fields:", error);
+        alert("There was an error saving the custom fields. Please try again.");
+    }
+}
+
 async function getAllMembers() {
     const teamNames = ['brass', 'flight-leads', 'inbound', 'sbirs'];
     const allMembers = [];
@@ -266,6 +276,8 @@ function createMemberCardElement(member, allMembers, customFields) {
     card.innerHTML = headerHTML + bodyHTML;
     card.addEventListener('dragstart', handleDragStart);
     card.addEventListener('dragend', handleDragEnd);
+    card.addEventListener('dragover', handleTeamCardDragOver);
+    card.addEventListener('drop', handleDrop);
     card.addEventListener('click', handleCardActions);
 
     return card;
@@ -469,19 +481,78 @@ async function handleFieldListClick(event) {
 
 
 // --- EVENT HANDLERS ---
+function getDraggableCard(event) {
+    return event.target.closest('.member-card, .chart-card, .chart-card-supervisor');
+}
+
+let activeDragImage = null;
+
+function clearDragImage() {
+    if (activeDragImage) {
+        activeDragImage.remove();
+        activeDragImage = null;
+    }
+}
+
+function setCustomDragImage(card, event) {
+    if (!event.dataTransfer) return;
+    clearDragImage();
+    const dragImage = card.cloneNode(true);
+    dragImage.classList.remove('expanded', 'dragging');
+    dragImage.classList.add('drag-preview');
+    if (dragImage.classList.contains('member-card')) {
+        const body = dragImage.querySelector('.card-body');
+        if (body) {
+            body.style.display = 'none';
+            body.style.padding = '0';
+            body.style.maxHeight = '0';
+            body.style.overflow = 'hidden';
+        }
+        dragImage.querySelectorAll('.context-menu.show').forEach(menu => menu.classList.remove('show'));
+    }
+    dragImage.style.position = 'absolute';
+    dragImage.style.top = '-1000px';
+    dragImage.style.left = '-1000px';
+    dragImage.style.opacity = '1';
+    dragImage.style.pointerEvents = 'none';
+    dragImage.style.transform = 'none';
+    dragImage.style.width = `${card.offsetWidth}px`;
+    document.body.appendChild(dragImage);
+
+    const rect = card.getBoundingClientRect();
+    const offsetX = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
+    const offsetY = Math.max(0, Math.min(rect.height, event.clientY - rect.top));
+    event.dataTransfer.setDragImage(dragImage, offsetX, offsetY);
+    activeDragImage = dragImage;
+}
+
+function handleTeamCardDragOver(event) {
+    event.preventDefault();
+    if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = 'move';
+    }
+    const container = event.currentTarget.closest('.team-container');
+    if (container) {
+        container.classList.add('drag-over');
+    }
+}
+
 function handleDragStart(event) {
-    const card = event.target.closest('.member-card');
-    if (card) {
+    const card = getDraggableCard(event);
+    if (card && event.dataTransfer) {
         event.dataTransfer.setData('text/plain', card.id);
+        event.dataTransfer.effectAllowed = 'move';
+        setCustomDragImage(card, event);
         setTimeout(() => card.classList.add('dragging'), 0);
     }
 }
 
 function handleDragEnd(event) {
-    const card = event.target.closest('.member-card');
+    const card = getDraggableCard(event);
     if (card) {
         card.classList.remove('dragging');
     }
+    clearDragImage();
 }
 
 async function handleFormSubmit(event) {
@@ -510,7 +581,10 @@ async function handleFormSubmit(event) {
 
 async function handleDrop(event) {
     event.preventDefault();
-    const container = event.currentTarget;
+    const container = event.currentTarget.classList.contains('team-container')
+        ? event.currentTarget
+        : event.currentTarget.closest('.team-container');
+    if (!container) return;
     container.classList.remove('drag-over');
     const cardId = event.dataTransfer.getData('text/plain');
     const member = findMemberById(cardId, await getCachedMembers());
@@ -698,7 +772,10 @@ function renderSupervisionChart(allMembers) {
             return;
         }
         supervisionContainer.innerHTML = `<div class="chart-container"><ul class="chart-children">${roots.map(createChartNode).join('')}</ul></div>`;
-        supervisionContainer.querySelectorAll('[draggable="true"]').forEach(el => el.addEventListener('dragstart', handleDragStart));
+        supervisionContainer.querySelectorAll('[draggable="true"]').forEach(el => {
+            el.addEventListener('dragstart', handleDragStart);
+            el.addEventListener('dragend', handleDragEnd);
+        });
         supervisionContainer.querySelectorAll('li').forEach(el => {
             el.addEventListener('dragover', (e) => e.preventDefault());
             el.addEventListener('drop', handleChartDrop);
