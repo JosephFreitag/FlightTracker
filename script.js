@@ -813,16 +813,26 @@ function calculatePromotionEligibility(member) {
             tisPathDate.setMonth(tisPathDate.getMonth() + 36);
             const tigPathDate = new Date(dorDate);
             tigPathDate.setMonth(tigPathDate.getMonth() + 28);
-            const standardPromoDate = (tisPathDate < tigPathDate) ? tisPathDate : tigPathDate;
-            const btzPromoDate = new Date(standardPromoDate);
-            btzPromoDate.setMonth(btzPromoDate.getMonth() - 6);
+            const standardPromoDateRaw = (tisPathDate < tigPathDate) ? tisPathDate : tigPathDate;
+
+            // Add 1 day because they must COMPLETE the anniversary day before promoting
+            const standardPromoDate = new Date(standardPromoDateRaw);
+            standardPromoDate.setDate(standardPromoDate.getDate() + 1);
+
+            const btzPromoDateRaw = new Date(standardPromoDateRaw);
+            btzPromoDateRaw.setMonth(btzPromoDateRaw.getMonth() - 6);
+
+            // Add 1 day to BTZ promo date as well
+            const btzPromoDate = new Date(btzPromoDateRaw);
+            btzPromoDate.setDate(btzPromoDate.getDate() + 1);
+
             const currentQuarter = getQuarterInfo(today);
             const btzPromoQuarter = getQuarterInfo(btzPromoDate);
             const boardQuarter = getPreviousQuarterInfo(btzPromoQuarter);
 
             const nextQuarter = getNextQuarterInfo(currentQuarter);
             const twoQuartersOut = getNextQuarterInfo(nextQuarter); // Calculate two quarters from now
-            
+
             const currentQuarterValue = getQuarterValue(currentQuarter);
             const boardQuarterValue = getQuarterValue(boardQuarter);
 
