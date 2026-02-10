@@ -209,21 +209,7 @@ async function checkAndProcessAutoPromotions(allMembers) {
                     newDorDate = calculatePromotionDate(member.tisDate, member.dorDate, 36, 6);
                 }
                 break;
-            case 'E-5':
-                if (monthsTIS >= 60 && monthsTIG >= 23) {
-                    shouldPromote = true;
-                    newRank = 'E-6';
-                    newDorDate = calculatePromotionDate(member.tisDate, member.dorDate, 60, 23);
-                }
-                break;
-            case 'E-6':
-                if (monthsTIS >= 96 && monthsTIG >= 24) {
-                    shouldPromote = true;
-                    newRank = 'E-7';
-                    newDorDate = calculatePromotionDate(member.tisDate, member.dorDate, 96, 24);
-                }
-                break;
-            // E-7 to E-8 and E-8 to E-9 require board selection, so no auto-promotion
+            // E-5 to E-6, E-6 to E-7, E-7 to E-8, and E-8 to E-9 require selection, so no auto-promotion
         }
 
         if (shouldPromote && newRank && newDorDate) {
