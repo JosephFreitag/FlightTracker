@@ -202,14 +202,7 @@ async function checkAndProcessAutoPromotions(allMembers) {
                     }
                 }
                 break;
-            case 'E-4':
-                if (monthsTIS >= 36 && monthsTIG >= 6) {
-                    shouldPromote = true;
-                    newRank = 'E-5';
-                    newDorDate = calculatePromotionDate(member.tisDate, member.dorDate, 36, 6);
-                }
-                break;
-            // E-5 to E-6, E-6 to E-7, E-7 to E-8, and E-8 to E-9 require selection, so no auto-promotion
+            // E-4 to E-5, E-5 to E-6, E-6 to E-7, E-7 to E-8, and E-8 to E-9 require selection, so no auto-promotion
         }
 
         if (shouldPromote && newRank && newDorDate) {
@@ -977,13 +970,13 @@ function calculatePromotionEligibility(member) {
             return { status: "Not Eligible", note: `BTZ board: Q${boardQuarter.quarter} ${boardQuarter.year}`, className: "not-eligible" };
 
         case 'E-4':
-            if (monthsTIS >= 36 && monthsTIG >= 6) return { status: "Auto-Promoted to E-5", note: "TIS/TIG met for SSgt.", className: "eligible" };
+            if (monthsTIS >= 36 && monthsTIG >= 6) return { status: "Board Eligible for E-5", note: "TIS/TIG met for SSgt board.", className: "eligible", showPromoteButton: true };
             return { status: "Not Eligible", note: "Req: 36m TIS & 6m TIG.", className: "not-eligible" };
         case 'E-5':
-            if (monthsTIS >= 60 && monthsTIG >= 23) return { status: "Auto-Promoted to E-6", note: "TIS/TIG met for TSgt.", className: "eligible" };
+            if (monthsTIS >= 60 && monthsTIG >= 23) return { status: "Board Eligible for E-6", note: "TIS/TIG met for TSgt board.", className: "eligible", showPromoteButton: true };
             return { status: "Not Eligible", note: "Req: 60m TIS & 23m TIG.", className: "not-eligible" };
         case 'E-6':
-            if (monthsTIS >= 96 && monthsTIG >= 24) return { status: "Auto-Promoted to E-7", note: "TIS/TIG met for MSgt.", className: "eligible" };
+            if (monthsTIS >= 96 && monthsTIG >= 24) return { status: "Board Eligible for E-7", note: "TIS/TIG met for MSgt board.", className: "eligible", showPromoteButton: true };
             return { status: "Not Eligible", note: "Req: 96m TIS & 24m TIG.", className: "not-eligible" };
         case 'E-7':
             if (monthsTIS >= 132 && monthsTIG >= 20) return { status: "Board Eligible for E-8", note: "TIS/TIG met for SMSgt board.", className: "eligible", showPromoteButton: true };
