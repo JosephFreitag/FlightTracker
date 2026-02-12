@@ -631,6 +631,24 @@ input:checked + .slider:before {
 .modal-content button[type="submit"]:hover { background-color: #008754; }
 .modal-content button[type="submit"]:active { transform: scale(0.99); }
 /* --- Eligibility & Action Styles --- */
+.promo-soon-tag {
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 0.75em;
+    font-weight: bold;
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background-color: #e67e22;
+    color: #ffffff;
+    margin-left: 6px;
+    animation: pulse 1.5s infinite;
+}
+.eligibility-promo-eligible { background-color: #004085; color: #d1e7ff; font-weight: bold; }
+.eligibility-promo-selected { background-color: #1a431a; color: #a4d4a4; font-weight: bold; }
+.eligibility-promo-not-selected { background-color: #5c6e7e; color: #ecf0f1; }
+.selection-btn { font-size: 0.85em; padding: 4px 10px; margin: 5px 5px 0 0; cursor: pointer; border-radius: 3px; border: 1px solid #888; background-color: #555; color: #fff; }
+.selection-btn:hover { background-color: #00A86B; border-color: #00A86B; }
 .eligibility-eligible, .eligibility-btz-select { background-color: #1a431a; color: #a4d4a4; font-weight: bold; }
 .eligibility-btz-next-q, .eligibility-btz-this-q { background-color: #dc3545; color: #fff; font-weight: bold; }
 .eligibility-btz-window { background-color: #004085; color: #d1e7ff; font-weight: bold; }
@@ -642,6 +660,128 @@ input:checked + .slider:before {
 .btz-action-btn { font-size: 0.8em; padding: 2px 6px; margin: 5px 5px 0 0; cursor: pointer; border-radius: 3px; border: 1px solid #888; background-color: #555; color: #fff; }
 .action-btn { background: none; border: none; cursor: pointer; font-size: 1.1em; padding: 0 5px; opacity: 0.7; transition: opacity 0.2s; color: #ecf0f1; }
 .action-btn:hover { opacity: 1; }
+/* --- Flight Tab Styles --- */
+.flight-tab-nav {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+.flight-tab {
+    padding: 10px 20px;
+    cursor: pointer;
+    background-color: #3B4048;
+    border: 1px solid #4F555E;
+    border-bottom: none;
+    color: #bdc3c7;
+    font-size: 1em;
+    font-weight: bold;
+    border-radius: 8px 8px 0 0;
+    transition: background-color 0.2s, color 0.2s;
+}
+.flight-tab:hover {
+    background-color: #4F555E;
+    color: #ecf0f1;
+}
+.flight-tab.active {
+    background-color: #00A86B;
+    color: #ffffff;
+    border-color: #00A86B;
+}
+.add-flight-btn {
+    padding: 10px 16px;
+    font-size: 1.2em;
+    font-weight: bold;
+    background-color: transparent;
+    border: 2px dashed #4F555E;
+    color: #4F555E;
+    border-radius: 8px 8px 0 0;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.add-flight-btn:hover {
+    border-color: #00A86B;
+    color: #00A86B;
+}
+.unbilleted-tab {
+    margin-left: auto;
+    background-color: #4F555E;
+    border-color: #4F555E;
+}
+.unbilleted-tab.active {
+    background-color: #e67e22;
+    border-color: #e67e22;
+    color: #ffffff;
+}
+
+/* --- Unbilleted View Styles --- */
+.unbilleted-layout {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 25px;
+    align-items: start;
+}
+.unbilleted-members-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+}
+.unbilleted-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: #3B4048;
+    padding: 12px 18px;
+    border-radius: 6px;
+    border: 1px solid #4F555E;
+    cursor: grab;
+    transition: all 0.2s;
+}
+.unbilleted-card:hover {
+    border-color: #00A86B;
+}
+.unbilleted-card.dragging {
+    opacity: 0.4;
+}
+.unbilleted-card-name {
+    font-weight: bold;
+    color: #ecf0f1;
+}
+.unbilleted-card-duty {
+    font-size: 0.85em;
+    color: #bdc3c7;
+}
+.flight-drop-zones {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.flight-drop-zone {
+    background-color: #3B4048;
+    border: 2px dashed #4F555E;
+    border-radius: 8px;
+    padding: 20px;
+    text-align: center;
+    transition: all 0.2s;
+    min-height: 60px;
+}
+.flight-drop-zone.drag-over {
+    border-color: #00A86B;
+    background-color: rgba(0, 168, 107, 0.15);
+}
+.flight-drop-zone-title {
+    font-weight: bold;
+    font-size: 1.1em;
+    color: #ecf0f1;
+}
+.flight-drop-zone-count {
+    font-size: 0.85em;
+    color: #bdc3c7;
+    margin-top: 4px;
+}
+
 #team-select-container.hidden, #status-container.hidden {
     display: none;
 }

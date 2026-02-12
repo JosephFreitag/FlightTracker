@@ -13,8 +13,12 @@
         <!-- ===== NEW: Button to manage custom fields ===== -->
         <button id="manage-fields-btn">Manage Fields</button>
     </div>
-    <!-- Tab Navigation -->
-    <div class="tab-nav">
+    <!-- Flight Tab Navigation -->
+    <div id="flight-tab-nav" class="flight-tab-nav">
+        <!-- Dynamically populated flight tabs -->
+    </div>
+    <!-- Sub-Tab Navigation (Team Overview / Supervision) -->
+    <div class="tab-nav" id="sub-tab-nav">
         <button class="tab-btn active" data-tab="team-overview">Team Overview</button>
         <button class="tab-btn" data-tab="supervision-view">Supervision</button>
     </div>
@@ -38,6 +42,9 @@
         </div>
         <div id="supervision-view" class="tab-content">
             <!-- This div will be populated by JavaScript -->
+        </div>
+        <div id="unbilleted-view" class="tab-content">
+            <!-- Populated by JavaScript -->
         </div>
     </main>
     
@@ -95,6 +102,10 @@
                 <fieldset>
                     <legend>Assignment</legend>
                     <div class="form-grid">
+                        <div id="flight-select-container">
+                            <label for="flight">Flight</label>
+                            <select id="flight" name="flight"><option value="">Unbilleted</option></select>
+                        </div>
                         <div id="team-select-container">
                             <label for="teamSelect">Team</label>
                             <select id="teamSelect" name="teamSelect"><option value="" disabled selected>Select Team...</option><option value="inbound-container">Inbound</option><option value="flight-leads-container">Flight Leads</option><option value="brass-container">BRASS</option><option value="sbirs-container">SBIRS</option></select>
