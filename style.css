@@ -782,6 +782,102 @@ input:checked + .slider:before {
     margin-top: 4px;
 }
 
+/* --- Custom Dialog Modal (replaces prompt/alert/confirm) --- */
+.custom-dialog-overlay {
+    display: none;
+    position: fixed;
+    z-index: 2000;
+    left: 0; top: 0;
+    width: 100%; height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(3px);
+    justify-content: center;
+    align-items: center;
+}
+.custom-dialog-overlay.active {
+    display: flex;
+}
+.custom-dialog {
+    background-color: #3B4048;
+    border: 1px solid #00A86B;
+    border-radius: 8px;
+    padding: 30px;
+    width: 90%;
+    max-width: 440px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    animation: fadeIn 0.15s ease-out;
+}
+.custom-dialog-title {
+    color: #00A86B;
+    font-size: 1.2em;
+    margin: 0 0 10px 0;
+    padding: 0;
+    border: none;
+}
+.custom-dialog-message {
+    color: #bdc3c7;
+    font-size: 0.95em;
+    margin: 0 0 20px 0;
+    line-height: 1.5;
+}
+.custom-dialog-input {
+    width: 100%;
+    padding: 12px;
+    font-size: 16px;
+    background-color: #282C34;
+    color: #ecf0f1;
+    border: 1px solid #4F555E;
+    border-radius: 4px;
+    box-sizing: border-box;
+    margin-bottom: 20px;
+    font-family: inherit;
+    transition: border-color 0.3s, box-shadow 0.3s;
+}
+.custom-dialog-input:focus {
+    outline: none;
+    border-color: #00A86B;
+    box-shadow: 0 0 0 3px rgba(0, 168, 107, 0.25);
+}
+.custom-dialog-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+.custom-dialog-btn {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: bold;
+    font-family: inherit;
+    transition: background-color 0.2s, transform 0.1s;
+}
+.custom-dialog-btn:active {
+    transform: scale(0.97);
+}
+.custom-dialog-btn-ok {
+    background-color: #00A86B;
+    color: #ffffff;
+}
+.custom-dialog-btn-ok:hover {
+    background-color: #008754;
+}
+.custom-dialog-btn-cancel {
+    background-color: #4F555E;
+    color: #ecf0f1;
+}
+.custom-dialog-btn-cancel:hover {
+    background-color: #6c757d;
+}
+.custom-dialog-btn-danger {
+    background-color: #a10e28;
+    color: #ffffff;
+}
+.custom-dialog-btn-danger:hover {
+    background-color: #c0392b;
+}
+
 #team-select-container.hidden, #status-container.hidden {
     display: none;
 }

@@ -170,6 +170,19 @@
         </div>
     </div>
 
+    <!-- Custom Dialog Modal (replaces browser prompt/alert/confirm) -->
+    <div id="custom-dialog-overlay" class="custom-dialog-overlay">
+        <div class="custom-dialog">
+            <h3 id="custom-dialog-title" class="custom-dialog-title"></h3>
+            <p id="custom-dialog-message" class="custom-dialog-message"></p>
+            <input type="text" id="custom-dialog-input" class="custom-dialog-input" style="display:none;">
+            <div class="custom-dialog-buttons">
+                <button id="custom-dialog-cancel" class="custom-dialog-btn custom-dialog-btn-cancel" style="display:none;">Cancel</button>
+                <button id="custom-dialog-ok" class="custom-dialog-btn custom-dialog-btn-ok">OK</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ===== CORRECTED SCRIPT LOADING ===== -->
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database-compat.js"></script>

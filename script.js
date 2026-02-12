@@ -24,6 +24,75 @@ let CUSTOM_FIELDS_CACHE = [];
 let FLIGHTS_CACHE = [];
 let activeFlightId = null;
 
+// --- CUSTOM DIALOG FUNCTIONS (replaces prompt/alert/confirm) ---
+
+function showCustomDialog({ title, message, inputDefault, showInput, showCancel, dangerOk }) {
+    return new Promise((resolve) => {
+        const overlay = document.getElementById('custom-dialog-overlay');
+        const titleEl = document.getElementById('custom-dialog-title');
+        const messageEl = document.getElementById('custom-dialog-message');
+        const inputEl = document.getElementById('custom-dialog-input');
+        const okBtn = document.getElementById('custom-dialog-ok');
+        const cancelBtn = document.getElementById('custom-dialog-cancel');
+
+        titleEl.textContent = title || '';
+        messageEl.textContent = message || '';
+        inputEl.style.display = showInput ? 'block' : 'none';
+        inputEl.value = inputDefault || '';
+        cancelBtn.style.display = showCancel ? 'inline-block' : 'none';
+
+        if (dangerOk) {
+            okBtn.className = 'custom-dialog-btn custom-dialog-btn-danger';
+            okBtn.textContent = dangerOk;
+        } else {
+            okBtn.className = 'custom-dialog-btn custom-dialog-btn-ok';
+            okBtn.textContent = 'OK';
+        }
+
+        overlay.classList.add('active');
+        if (showInput) inputEl.focus();
+
+        function cleanup() {
+            overlay.classList.remove('active');
+            okBtn.removeEventListener('click', onOk);
+            cancelBtn.removeEventListener('click', onCancel);
+            inputEl.removeEventListener('keydown', onKeydown);
+        }
+
+        function onOk() {
+            cleanup();
+            if (showInput) resolve(inputEl.value);
+            else resolve(true);
+        }
+
+        function onCancel() {
+            cleanup();
+            resolve(showInput ? null : false);
+        }
+
+        function onKeydown(e) {
+            if (e.key === 'Enter') onOk();
+            if (e.key === 'Escape') onCancel();
+        }
+
+        okBtn.addEventListener('click', onOk);
+        cancelBtn.addEventListener('click', onCancel);
+        if (showInput) inputEl.addEventListener('keydown', onKeydown);
+    });
+}
+
+function customAlert(message, title = 'Notice') {
+    return showCustomDialog({ title, message, showInput: false, showCancel: false });
+}
+
+function customConfirm(message, title = 'Confirm', dangerOk = null) {
+    return showCustomDialog({ title, message, showInput: false, showCancel: true, dangerOk });
+}
+
+function customPrompt(message, defaultValue = '', title = 'Input') {
+    return showCustomDialog({ title, message, inputDefault: defaultValue, showInput: true, showCancel: true });
+}
+
 // --- DATA FUNCTIONS ---
 
 async function getCustomFields() {
@@ -62,7 +131,7 @@ async function saveCustomFields(fields) {
         CUSTOM_FIELDS_CACHE = fields;
     } catch (error) {
         console.error("Error saving custom fields:", error);
-        alert("There was an error saving the custom fields. Please try again.");
+        customAlert("There was an error saving the custom fields. Please try again.", "Error");
     }
 }
 
@@ -86,7 +155,7 @@ async function saveFlights(flights) {
         FLIGHTS_CACHE = flights;
     } catch (error) {
         console.error("Error saving flights:", error);
-        alert("There was an error saving flights. Please try again.");
+        customAlert("There was an error saving flights. Please try again.", "Error");
     }
 }
 
@@ -123,7 +192,7 @@ async function getAllMembers() {
         return allMembers;
     } catch (error) {
         console.error("Error fetching data:", error);
-        alert("Failed to load data from Firebase. Check console for errors.");
+        customAlert("Failed to load data from Firebase. Check console for errors.", "Error");
         return [];
     }
 }
@@ -163,15 +232,16 @@ async function saveMember(memberData, isEditing = false) {
         await teamRef.set(cleanTeamArray);
     } catch (error) {
         console.error("Error saving member:", error);
-        alert("There was an error saving the member. Please try again.");
+        customAlert("There was an error saving the member. Please try again.", "Error");
     }
 }
 
 async function deleteMember(memberData) {
-    if (!confirm(`Are you sure you want to permanently delete ${memberData.lastName}?`)) return;
+    const confirmed = await customConfirm(`Are you sure you want to permanently delete ${memberData.lastName}?`, "Delete Member", "Delete");
+    if (!confirmed) return;
     const allMembers = await getCachedMembers();
     if (allMembers.some(m => m.supervisor === memberData.rowId)) {
-        return alert(`Cannot delete ${memberData.lastName}. Please re-assign their supervisee(s) first.`);
+        return customAlert(`Cannot delete ${memberData.lastName}. Please re-assign their supervisee(s) first.`, "Cannot Delete");
     }
     const teamName = memberData.teamSelect.replace('-container', '');
     const teamRef = database.ref(teamName);
@@ -184,7 +254,7 @@ async function deleteMember(memberData) {
         await renderAll(true);
     } catch (error) {
         console.error("Error deleting member:", error);
-        alert("There was an error deleting the member. Please try again.");
+        customAlert("There was an error deleting the member. Please try again.", "Error");
     }
 }
 
@@ -446,7 +516,7 @@ function renderFlightTabs(flights) {
         // Right-click to delete flight
         btn.addEventListener('contextmenu', async (e) => {
             e.preventDefault();
-            if (confirm(`Delete flight "${flight.name}"? Members will become unbilleted.`)) {
+            if (await customConfirm(`Delete flight "${flight.name}"? Members will become unbilleted.`, "Delete Flight", "Delete")) {
                 // Unbillet all members in this flight
                 const allMembers = await getCachedMembers();
                 for (const member of allMembers) {
@@ -470,7 +540,7 @@ function renderFlightTabs(flights) {
     addBtn.textContent = '+';
     addBtn.title = 'Add New Flight';
     addBtn.addEventListener('click', async () => {
-        const name = prompt("Enter flight name:");
+        const name = await customPrompt("Enter the name for the new flight:", "", "New Flight");
         if (!name || !name.trim()) return;
         const newFlight = { id: `flight_${Date.now()}`, name: name.trim() };
         const updatedFlights = [...FLIGHTS_CACHE, newFlight];
@@ -833,7 +903,7 @@ async function handleAddFieldSubmit(event) {
     };
 
     if (!newField.name) {
-        alert("Field name cannot be empty.");
+        await customAlert("Field name cannot be empty.", "Validation");
         return;
     }
 
@@ -848,7 +918,7 @@ async function handleFieldListClick(event) {
     if (!fieldId) return;
 
     if (event.target.matches('.delete-field-btn')) {
-        if (confirm("Are you sure you want to delete this field? This cannot be undone.")) {
+        if (await customConfirm("Are you sure you want to delete this field? This cannot be undone.", "Delete Field", "Delete")) {
             const updatedFields = CUSTOM_FIELDS_CACHE.filter(f => f.id !== fieldId);
             await saveCustomFields(updatedFields);
             await renderFieldManagerList();
@@ -997,7 +1067,7 @@ async function handleDrop(event) {
             await renderAll(true);
         } catch (error) {
             console.error("Error moving member:", error);
-            alert("An error occurred while moving the member.");
+            customAlert("An error occurred while moving the member.", "Error");
         }
     }
 }
@@ -1065,9 +1135,9 @@ async function handleCardActions(event) {
         if (!memberData) return;
 
         if (target.dataset.action === 'selected') {
-            const promoDate = prompt("Enter Promotion Date (YYYY-MM-DD):", "");
+            const promoDate = await customPrompt("Enter Promotion Date (YYYY-MM-DD):", "", "Promotion Date");
             if (!promoDate || !/^\d{4}-\d{2}-\d{2}$/.test(promoDate)) {
-                alert("Invalid date format.");
+                if (promoDate !== null) await customAlert("Invalid date format. Please use YYYY-MM-DD.", "Invalid Date");
                 return;
             }
             memberData.promotionStatus = 'selected';
@@ -1076,9 +1146,9 @@ async function handleCardActions(event) {
             memberData.promotionStatus = 'not-selected';
             memberData.promotionDate = '';
         } else if (target.classList.contains('edit-promo-date-btn')) {
-            const newDate = prompt("Edit Promotion Date (YYYY-MM-DD):", memberData.promotionDate || "");
+            const newDate = await customPrompt("Edit Promotion Date (YYYY-MM-DD):", memberData.promotionDate || "", "Edit Promotion Date");
             if (!newDate || !/^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
-                alert("Invalid date format.");
+                if (newDate !== null) await customAlert("Invalid date format. Please use YYYY-MM-DD.", "Invalid Date");
                 return;
             }
             memberData.promotionDate = newDate;
@@ -1092,11 +1162,11 @@ async function handleCardActions(event) {
     if (target.matches('.promote-btn') || target.matches('.btz-action-btn')) {
         const memberData = findMemberById(card.id, ALL_MEMBERS_CACHE);
         if(!memberData) return;
-        
+
         if (target.matches('.promote-btn')) {
-            const newDor = prompt("Enter new Date of Rank (YYYY-MM-DD):", new Date().toISOString().slice(0, 10));
+            const newDor = await customPrompt("Enter new Date of Rank (YYYY-MM-DD):", new Date().toISOString().slice(0, 10), "New Date of Rank");
             if (!newDor || !/^\d{4}-\d{2}-\d{2}$/.test(newDor)) {
-                alert("Invalid date format.");
+                if (newDor !== null) await customAlert("Invalid date format. Please use YYYY-MM-DD.", "Invalid Date");
                 return;
             }
             const currentRankIndex = PROMOTION_SEQUENCE.indexOf(memberData.rank);
@@ -1106,7 +1176,7 @@ async function handleCardActions(event) {
                 await saveMember(memberData, true);
                 await renderAll(true);
             } else {
-                alert("Max rank reached or invalid current rank for promotion sequence.");
+                await customAlert("Max rank reached or invalid current rank for promotion sequence.", "Cannot Promote");
             }
         } else { // BTZ action
             const action = target.dataset.action;
