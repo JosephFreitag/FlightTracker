@@ -15,8 +15,10 @@ const memberModal = document.getElementById('add-member-modal');
 const addMemberForm = document.getElementById('add-member-form');
 const dutyTitleSelect = document.getElementById('dutyTitle');
 
-const fieldsModal = document.getElementById('manage-fields-modal');
+const manageFieldsView = document.getElementById('manage-fields-view');
+const appMainView = document.getElementById('app-main-view');
 const addFieldForm = document.getElementById('add-field-form');
+const editFieldForm = document.getElementById('edit-field-form');
 const detailedViewModal = document.getElementById('detailed-view-modal');
 
 let ALL_MEMBERS_CACHE = [];
@@ -767,8 +769,9 @@ function createMemberCardElement(member, allMembers, customFields) {
         visibleFields.forEach(field => {
             if (field.showOnCard) {
                 let value = member.customData[field.id];
-                if (field.type === 'checkbox') value = value === 'true' || value === true ? 'Yes' : 'No';
-                else if (!value) return;
+                if (field.type === 'checkbox') {
+                    value = formatCheckboxDisplay(value);
+                } else if (!value) return;
                 const item = `<strong>${field.name}:</strong><span>${value}</span>`;
                 if (field.cardDisplay === 'collapsible') collapsibleItems.push(item);
                 else gridItems.push(item);
@@ -932,22 +935,37 @@ function createFieldInput(field, memberData) {
                 inputEl.innerHTML += `<option value="${opt}" ${value === opt ? 'selected' : ''}>${opt}</option>`;
             });
             break;
-        case 'checkbox':
+        case 'checkbox': {
             inputEl = document.createElement('div');
-            inputEl.className = 'checkbox-field-wrapper';
-            const cb = document.createElement('input');
-            cb.type = 'checkbox';
-            cb.id = fieldId;
-            cb.name = fieldId;
-            cb.value = 'true';
-            cb.checked = value === 'true' || value === true;
-            const cbLabel = document.createElement('label');
-            cbLabel.setAttribute('for', fieldId);
-            cbLabel.textContent = 'Yes';
-            cbLabel.className = 'checkbox-inline-label';
-            inputEl.appendChild(cb);
-            inputEl.appendChild(cbLabel);
+            inputEl.className = 'checkbox-field-wrapper checkbox-multi-wrapper';
+            // Parse stored value: could be array JSON, comma-sep string, or old boolean
+            let selectedValues = [];
+            if (Array.isArray(value)) {
+                selectedValues = value;
+            } else if (typeof value === 'string' && value.startsWith('[')) {
+                try { selectedValues = JSON.parse(value); } catch(e) { selectedValues = [value]; }
+            } else if (value === 'true' || value === true) {
+                selectedValues = (field.options && field.options.length > 0) ? [field.options[0]] : ['Yes'];
+            } else if (value && value !== 'false') {
+                selectedValues = value.split(',').map(v => v.trim());
+            }
+            (field.options || ['Yes', 'No']).forEach((opt, i) => {
+                const cbId = `${fieldId}_${i}`;
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.name = fieldId;
+                cb.id = cbId;
+                cb.value = opt;
+                cb.checked = selectedValues.includes(opt);
+                const cbLbl = document.createElement('label');
+                cbLbl.setAttribute('for', cbId);
+                cbLbl.textContent = opt;
+                cbLbl.className = 'checkbox-inline-label';
+                inputEl.appendChild(cb);
+                inputEl.appendChild(cbLbl);
+            });
             break;
+        }
         case 'radio':
             inputEl = document.createElement('div');
             inputEl.className = 'radio-field-wrapper';
@@ -1064,7 +1082,7 @@ async function openDetailModal(memberId) {
         const sorted = [...visibleFields].sort((a, b) => (a.order || 0) - (b.order || 0));
         sorted.forEach(field => {
             let value = member.customData[field.id];
-            if (field.type === 'checkbox') value = value === 'true' || value === true ? 'Yes' : 'No';
+            if (field.type === 'checkbox') value = formatCheckboxDisplay(value);
             else if (field.type === 'file' && value) value = `<a href="#" class="file-link">${value}</a>`;
             else value = value || 'N/A';
             details.push(`<strong>${field.name}:</strong><span>${value}</span>`);
@@ -1103,7 +1121,7 @@ const FIELD_TYPE_LABELS = {
     dropdown: 'Dropdown', checkbox: 'Checkbox', radio: 'Radio', file: 'File'
 };
 
-async function openFieldManagerModal() {
+async function showManageFieldsView() {
     const [fields, groups] = await Promise.all([getCachedFields(true), getCachedGroups(true)]);
     CURRENT_ROLE = await getAccessRole();
     const roleSelect = document.getElementById('current-role-select');
@@ -1114,7 +1132,29 @@ async function openFieldManagerModal() {
     populateGroupDropdown(groups);
     populateDependencyDropdown(fields);
     await renderFieldManagerList();
-    fieldsModal.style.display = 'block';
+    // Migrate any old boolean checkbox fields to options-based
+    await migrateCheckboxFields();
+    // Switch views
+    appMainView.style.display = 'none';
+    manageFieldsView.style.display = 'block';
+    document.getElementById('edit-field-panel').style.display = 'none';
+}
+
+function hideManageFieldsView() {
+    manageFieldsView.style.display = 'none';
+    appMainView.style.display = 'block';
+    renderAll(true);
+}
+
+async function migrateCheckboxFields() {
+    let changed = false;
+    for (const field of CUSTOM_FIELDS_CACHE) {
+        if (field.type === 'checkbox' && (!field.options || field.options.length === 0)) {
+            field.options = ['Yes', 'No'];
+            changed = true;
+        }
+    }
+    if (changed) await saveCustomFields(CUSTOM_FIELDS_CACHE);
 }
 
 function updateRoleDescription() {
@@ -1201,12 +1241,17 @@ function populateDependencyDropdown(fields) {
     });
 }
 
-function toggleFieldTypeOptions() {
-    const type = document.getElementById('new-field-type').value;
-    document.getElementById('field-options-section').style.display = (type === 'dropdown' || type === 'radio') ? 'block' : 'none';
-    document.getElementById('validation-text-rules').style.display = (type === 'text' || type === 'textarea') ? 'block' : 'none';
-    document.getElementById('validation-number-rules').style.display = (type === 'number') ? 'block' : 'none';
-    document.getElementById('validation-date-rules').style.display = (type === 'date') ? 'block' : 'none';
+function toggleFieldTypeOptions(prefix = 'new') {
+    const type = document.getElementById(`${prefix}-field-type`).value;
+    const needsOptions = type === 'dropdown' || type === 'radio' || type === 'checkbox';
+    const optSec = prefix === 'new' ? 'field-options-section' : 'edit-field-options-section';
+    const textRules = prefix === 'new' ? 'validation-text-rules' : 'edit-validation-text-rules';
+    const numRules = prefix === 'new' ? 'validation-number-rules' : 'edit-validation-number-rules';
+    const dateRules = prefix === 'new' ? 'validation-date-rules' : 'edit-validation-date-rules';
+    document.getElementById(optSec).style.display = needsOptions ? 'block' : 'none';
+    document.getElementById(textRules).style.display = (type === 'text' || type === 'textarea') ? 'block' : 'none';
+    document.getElementById(numRules).style.display = (type === 'number') ? 'block' : 'none';
+    document.getElementById(dateRules).style.display = (type === 'date') ? 'block' : 'none';
 }
 
 async function renderFieldManagerList() {
@@ -1321,11 +1366,11 @@ async function handleAddFieldSubmit(event) {
         dependency: null
     };
 
-    // Collect options for dropdown/radio
-    if (type === 'dropdown' || type === 'radio') {
+    // Collect options for dropdown/radio/checkbox
+    if (type === 'dropdown' || type === 'radio' || type === 'checkbox') {
         newField.options = getOptionsFromForm();
         if (newField.options.length < 2) {
-            await customAlert("Dropdown and Radio fields need at least 2 options.", "Validation");
+            await customAlert("This field type needs at least 2 options.", "Validation");
             return;
         }
     }
@@ -1395,23 +1440,141 @@ async function handleFieldListClick(event) {
         }
     } else if (target.matches('.edit-field-btn')) {
         if (!canManageFields()) return;
-        await openEditFieldDialog(fieldId);
+        openEditFieldPanel(fieldId);
     }
 }
 
-async function openEditFieldDialog(fieldId) {
+function openEditFieldPanel(fieldId) {
     const field = CUSTOM_FIELDS_CACHE.find(f => f.id === fieldId);
     if (!field) return;
-    const newName = await customPrompt("Edit field name:", field.name, "Edit Field");
-    if (newName === null) return;
-    if (!newName.trim()) {
+
+    const panel = document.getElementById('edit-field-panel');
+    panel.style.display = 'block';
+    panel.scrollIntoView({ behavior: 'smooth' });
+
+    document.getElementById('edit-field-id').value = field.id;
+    document.getElementById('edit-field-name').value = field.name;
+    document.getElementById('edit-field-type').value = field.type;
+
+    // Populate group dropdown
+    const groupSel = document.getElementById('edit-field-group');
+    groupSel.innerHTML = '<option value="">(No Group)</option>';
+    FIELD_GROUPS_CACHE.forEach(g => {
+        groupSel.innerHTML += `<option value="${g.id}" ${field.group === g.id ? 'selected' : ''}>${g.name}</option>`;
+    });
+
+    // Options
+    const optsList = document.getElementById('edit-field-options-list');
+    optsList.innerHTML = '';
+    if (field.options && field.options.length > 0) {
+        field.options.forEach((opt, i) => {
+            const inp = document.createElement('input');
+            inp.type = 'text';
+            inp.className = 'field-option-input';
+            inp.value = opt;
+            inp.placeholder = `Option ${i + 1}`;
+            optsList.appendChild(inp);
+        });
+    }
+
+    // Validation
+    document.getElementById('edit-field-required').checked = field.required || false;
+    const v = field.validation || {};
+    document.getElementById('edit-field-min-length').value = v.minLength || '';
+    document.getElementById('edit-field-max-length').value = v.maxLength || '';
+    document.getElementById('edit-field-regex').value = v.regex || '';
+    document.getElementById('edit-field-regex-msg').value = v.regexMessage || '';
+    document.getElementById('edit-field-min-value').value = v.minValue !== undefined && v.minValue !== null ? v.minValue : '';
+    document.getElementById('edit-field-max-value').value = v.maxValue !== undefined && v.maxValue !== null ? v.maxValue : '';
+    document.getElementById('edit-field-min-date').value = v.minDate || '';
+    document.getElementById('edit-field-max-date').value = v.maxDate || '';
+
+    // Display settings
+    document.getElementById('edit-field-show-card').checked = field.showOnCard !== false;
+    document.getElementById('edit-field-visible').checked = field.visible !== false;
+    document.getElementById('edit-field-card-display').value = field.cardDisplay || 'main';
+    document.getElementById('edit-field-help-text').value = field.helpText || '';
+
+    // Dependency
+    const depSel = document.getElementById('edit-field-dep-field');
+    depSel.innerHTML = '<option value="">(None - Always Visible)</option>';
+    CUSTOM_FIELDS_CACHE.filter(f => f.id !== field.id).forEach(f => {
+        depSel.innerHTML += `<option value="${f.id}" ${field.dependency?.fieldId === f.id ? 'selected' : ''}>${f.name} (${FIELD_TYPE_LABELS[f.type] || f.type})</option>`;
+    });
+    document.getElementById('edit-field-dep-value').value = field.dependency?.value || '';
+    document.getElementById('edit-field-dep-value').disabled = !field.dependency?.fieldId;
+
+    toggleFieldTypeOptions('edit');
+}
+
+async function handleEditFieldSubmit(event) {
+    event.preventDefault();
+    const fieldId = document.getElementById('edit-field-id').value;
+    const field = CUSTOM_FIELDS_CACHE.find(f => f.id === fieldId);
+    if (!field) return;
+
+    const name = document.getElementById('edit-field-name').value.trim();
+    if (!name) {
         await customAlert("Field name cannot be empty.", "Validation");
         return;
     }
-    field.name = newName.trim();
+
+    const type = document.getElementById('edit-field-type').value;
+
+    field.name = name;
+    field.type = type;
+    field.group = document.getElementById('edit-field-group').value || '';
+    field.required = document.getElementById('edit-field-required').checked;
+    field.showOnCard = document.getElementById('edit-field-show-card').checked;
+    field.visible = document.getElementById('edit-field-visible').checked;
+    field.cardDisplay = document.getElementById('edit-field-card-display').value;
+    field.helpText = document.getElementById('edit-field-help-text').value.trim();
+
+    // Options
+    if (type === 'dropdown' || type === 'radio' || type === 'checkbox') {
+        const inputs = document.querySelectorAll('#edit-field-options-list .field-option-input');
+        field.options = Array.from(inputs).map(i => i.value.trim()).filter(v => v);
+        if (field.options.length < 2) {
+            await customAlert("This field type needs at least 2 options.", "Validation");
+            return;
+        }
+    } else {
+        field.options = [];
+    }
+
+    // Validation rules
+    field.validation = {};
+    if (type === 'text' || type === 'textarea') {
+        const minLen = document.getElementById('edit-field-min-length').value;
+        const maxLen = document.getElementById('edit-field-max-length').value;
+        const regex = document.getElementById('edit-field-regex').value.trim();
+        const regexMsg = document.getElementById('edit-field-regex-msg').value.trim();
+        if (minLen) field.validation.minLength = parseInt(minLen);
+        if (maxLen) field.validation.maxLength = parseInt(maxLen);
+        if (regex) { field.validation.regex = regex; field.validation.regexMessage = regexMsg || 'Invalid format.'; }
+    }
+    if (type === 'number') {
+        const minVal = document.getElementById('edit-field-min-value').value;
+        const maxVal = document.getElementById('edit-field-max-value').value;
+        if (minVal !== '') field.validation.minValue = parseFloat(minVal);
+        if (maxVal !== '') field.validation.maxValue = parseFloat(maxVal);
+    }
+    if (type === 'date') {
+        const minDate = document.getElementById('edit-field-min-date').value;
+        const maxDate = document.getElementById('edit-field-max-date').value;
+        if (minDate) field.validation.minDate = minDate;
+        if (maxDate) field.validation.maxDate = maxDate;
+    }
+
+    // Dependency
+    const depField = document.getElementById('edit-field-dep-field').value;
+    const depValue = document.getElementById('edit-field-dep-value').value.trim();
+    field.dependency = depField ? { fieldId: depField, value: depValue } : null;
+
     await saveCustomFields(CUSTOM_FIELDS_CACHE);
+    populateDependencyDropdown(CUSTOM_FIELDS_CACHE);
     await renderFieldManagerList();
-    await renderAll(true);
+    document.getElementById('edit-field-panel').style.display = 'none';
 }
 
 async function handleAddGroup() {
@@ -1458,9 +1621,32 @@ async function handleGroupsClick(event) {
     }
 }
 
+// --- CHECKBOX DISPLAY HELPER ---
+function formatCheckboxDisplay(value) {
+    if (!value) return 'None';
+    if (Array.isArray(value)) return value.length > 0 ? value.join(', ') : 'None';
+    if (typeof value === 'string' && value.startsWith('[')) {
+        try { const arr = JSON.parse(value); return arr.length > 0 ? arr.join(', ') : 'None'; } catch(e) {}
+    }
+    if (value === 'true') return 'Yes';
+    if (value === 'false') return 'No';
+    return value;
+}
+
 // --- CUSTOM FIELD VALIDATION ---
 function validateCustomField(field, value) {
     const errors = [];
+    // For checkboxes, parse JSON array and check if empty
+    if (field.type === 'checkbox') {
+        let arr = [];
+        if (typeof value === 'string' && value.startsWith('[')) {
+            try { arr = JSON.parse(value); } catch(e) {}
+        }
+        if (field.required && arr.length === 0) {
+            errors.push(`${field.name} requires at least one selection.`);
+        }
+        return errors;
+    }
     if (field.required && (!value || (typeof value === 'string' && !value.trim()))) {
         errors.push(`${field.name} is required.`);
         return errors;
@@ -1581,10 +1767,11 @@ async function handleFormSubmit(event) {
     for (const field of CUSTOM_FIELDS_CACHE) {
         const key = `custom_${field.id}`;
         let value = memberData[key] || '';
-        // Handle checkbox (unchecked checkboxes aren't in FormData)
+        // Handle checkbox (multi-select: collect all checked values as JSON array)
         if (field.type === 'checkbox') {
-            const cb = document.getElementById(key);
-            value = cb && cb.checked ? 'true' : 'false';
+            const checked = document.querySelectorAll(`input[name="${key}"]:checked`);
+            const vals = Array.from(checked).map(cb => cb.value);
+            value = JSON.stringify(vals);
             memberData[key] = value;
         }
         // Handle radio
@@ -2012,15 +2199,26 @@ memberModal.querySelector('.close-btn').addEventListener('click', () => memberMo
 addMemberForm.addEventListener('submit', handleFormSubmit);
 dutyTitleSelect.addEventListener('change', handleAssignmentChange);
 
-document.getElementById('manage-fields-btn').addEventListener('click', openFieldManagerModal);
-fieldsModal.querySelector('.close-btn').addEventListener('click', () => fieldsModal.style.display = 'none');
+// --- Hamburger Menu ---
+document.getElementById('page-hamburger-btn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.getElementById('page-hamburger-menu').classList.toggle('show');
+});
+document.getElementById('nav-manage-fields').addEventListener('click', () => {
+    document.getElementById('page-hamburger-menu').classList.remove('show');
+    showManageFieldsView();
+});
+document.getElementById('mf-back-btn').addEventListener('click', hideManageFieldsView);
+
+// --- Field Manager Event Listeners ---
 addFieldForm.addEventListener('submit', handleAddFieldSubmit);
 document.getElementById('existing-fields-list').addEventListener('click', handleFieldListClick);
 
 // Field type change toggles validation/options sections
-document.getElementById('new-field-type').addEventListener('change', toggleFieldTypeOptions);
+document.getElementById('new-field-type').addEventListener('change', () => toggleFieldTypeOptions('new'));
+document.getElementById('edit-field-type').addEventListener('change', () => toggleFieldTypeOptions('edit'));
 
-// Add option button for dropdown/radio
+// Add option buttons
 document.getElementById('add-option-btn').addEventListener('click', () => {
     const list = document.getElementById('field-options-list');
     const count = list.querySelectorAll('.field-option-input').length;
@@ -2030,11 +2228,28 @@ document.getElementById('add-option-btn').addEventListener('click', () => {
     input.placeholder = `Option ${count + 1}`;
     list.appendChild(input);
 });
+document.getElementById('edit-add-option-btn').addEventListener('click', () => {
+    const list = document.getElementById('edit-field-options-list');
+    const count = list.querySelectorAll('.field-option-input').length;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'field-option-input';
+    input.placeholder = `Option ${count + 1}`;
+    list.appendChild(input);
+});
 
-// Dependency field change
+// Dependency field changes
 document.getElementById('new-field-dep-field').addEventListener('change', (e) => {
-    const depValueInput = document.getElementById('new-field-dep-value');
-    depValueInput.disabled = !e.target.value;
+    document.getElementById('new-field-dep-value').disabled = !e.target.value;
+});
+document.getElementById('edit-field-dep-field').addEventListener('change', (e) => {
+    document.getElementById('edit-field-dep-value').disabled = !e.target.value;
+});
+
+// Edit field form
+editFieldForm.addEventListener('submit', handleEditFieldSubmit);
+document.getElementById('edit-field-cancel').addEventListener('click', () => {
+    document.getElementById('edit-field-panel').style.display = 'none';
 });
 
 // Add group button
@@ -2074,12 +2289,16 @@ document.getElementById('sub-tab-nav').addEventListener('click', async (event) =
 });
 
 document.addEventListener('click', function (event) {
-    // If the click is not inside a context menu and not the hamburger itself
+    // Close card context menus
     if (!event.target.closest('.context-menu') && !event.target.closest('.hamburger-menu')) {
-        // Close any open context menus
         document.querySelectorAll('.context-menu.show').forEach(menu => {
             menu.classList.remove('show');
         });
+    }
+    // Close page hamburger menu
+    if (!event.target.closest('.page-hamburger-wrapper')) {
+        const pageMenu = document.getElementById('page-hamburger-menu');
+        if (pageMenu) pageMenu.classList.remove('show');
     }
 });
 
