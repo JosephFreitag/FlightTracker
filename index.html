@@ -8,11 +8,6 @@
 </head>
 <body>
     <h1>Flights Member Tracker</h1>
-    <div class="header-controls">
-        <button id="add-member-btn">Add New Member</button>
-        <!-- ===== NEW: Button to manage custom fields ===== -->
-        <button id="manage-fields-btn">Manage Fields</button>
-    </div>
     <!-- Flight Tab Navigation -->
     <div id="flight-tab-nav" class="flight-tab-nav">
         <!-- Dynamically populated flight tabs -->
@@ -25,6 +20,10 @@
     <!-- Main Content Area -->
     <main id="main-content">
         <div id="team-overview" class="tab-content active team-view-cards">
+            <div class="header-controls">
+                <button id="add-member-btn">Add New Member</button>
+                <button id="manage-fields-btn">Manage Fields</button>
+            </div>
             <h2 class="section-header">Inbound</h2>
             <div id="inbound-container" class="team-container"></div>
             <h2 class="section-header">Flight Leads</h2>
