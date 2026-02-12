@@ -881,3 +881,461 @@ input:checked + .slider:before {
 #team-select-container.hidden, #status-container.hidden {
     display: none;
 }
+
+/* --- Enhanced Manage Fields Modal --- */
+.modal-content-wide {
+    max-width: 960px;
+}
+
+/* Access Control Bar */
+.access-control-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 18px;
+    background-color: #282C34;
+    border-radius: 6px;
+    border: 1px solid #4F555E;
+    margin-bottom: 20px;
+}
+.access-control-bar label {
+    color: #bdc3c7;
+    font-weight: bold;
+    font-size: 0.9em;
+    white-space: nowrap;
+}
+.access-control-bar select {
+    background-color: #3B4048;
+    color: #ecf0f1;
+    border: 1px solid #4F555E;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+.role-description {
+    color: #8e9aaf;
+    font-size: 0.85em;
+    font-style: italic;
+}
+
+/* Field Groups */
+.field-groups-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+.field-group-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background-color: #282C34;
+    padding: 8px 14px;
+    border-radius: 5px;
+    border: 1px solid #4F555E;
+    cursor: grab;
+    transition: all 0.2s;
+}
+.field-group-item:hover { border-color: #00A86B; }
+.field-group-item.dragging { opacity: 0.4; }
+.group-drag-handle { color: #4F555E; font-size: 1.1em; cursor: grab; }
+.group-name { font-weight: bold; color: #ecf0f1; flex-grow: 1; }
+.group-field-count { color: #8e9aaf; font-size: 0.85em; }
+
+.add-group-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+.inline-input {
+    flex: 1;
+    background-color: #282C34;
+    color: #ecf0f1;
+    border: 1px solid #4F555E;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 14px;
+}
+.inline-input:focus {
+    outline: none;
+    border-color: #00A86B;
+    box-shadow: 0 0 0 3px rgba(0, 168, 107, 0.25);
+}
+.inline-btn {
+    background-color: #00A86B;
+    color: #fff;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.inline-btn:hover { background-color: #008754; }
+.inline-btn-sm {
+    background-color: #4F555E;
+    color: #ecf0f1;
+    border: none;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    cursor: pointer;
+}
+.inline-btn-sm:hover { background-color: #00A86B; color: #fff; }
+.btn-danger-sm {
+    background-color: #6c2e2e;
+    color: #ffc7ce;
+}
+.btn-danger-sm:hover { background-color: #a10e28; color: #fff; }
+
+/* Field Options Section */
+.field-config-section {
+    margin-top: 15px;
+    padding-top: 12px;
+    border-top: 1px solid #3B4048;
+}
+.config-section-title {
+    color: #00A86B;
+    font-size: 0.9em;
+    margin: 0 0 10px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.field-options-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 8px 0;
+}
+.field-option-input {
+    background-color: #282C34;
+    color: #ecf0f1;
+    border: 1px solid #4F555E;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 14px;
+}
+.field-option-input:focus {
+    outline: none;
+    border-color: #00A86B;
+}
+
+/* Validation Grid */
+.validation-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.validation-sub {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    padding: 10px;
+    background-color: #2d3139;
+    border-radius: 4px;
+}
+.validation-sub label {
+    font-size: 0.85em;
+    color: #bdc3c7;
+    margin-bottom: 4px;
+    display: block;
+}
+.validation-sub input {
+    width: 100%;
+    background-color: #282C34;
+    color: #ecf0f1;
+    border: 1px solid #4F555E;
+    padding: 8px;
+    border-radius: 4px;
+    box-sizing: border-box;
+    font-size: 14px;
+}
+.validation-sub input:focus {
+    outline: none;
+    border-color: #00A86B;
+}
+.validation-wide { grid-column: 1 / -1; }
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #ecf0f1;
+    font-size: 0.9em;
+    cursor: pointer;
+}
+.checkbox-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #00A86B;
+}
+
+/* Display Settings */
+.display-settings-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+.display-settings-grid label.checkbox-label {
+    padding: 8px 0;
+}
+.display-settings-grid select,
+.display-settings-grid input[type="text"] {
+    width: 100%;
+    background-color: #282C34;
+    color: #ecf0f1;
+    border: 1px solid #4F555E;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+.display-settings-grid select:focus,
+.display-settings-grid input[type="text"]:focus {
+    outline: none;
+    border-color: #00A86B;
+}
+.display-settings-grid > div label {
+    display: block;
+    font-size: 0.85em;
+    color: #bdc3c7;
+    margin-bottom: 4px;
+}
+
+/* Dependency Grid */
+.dependency-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+.dependency-grid label {
+    display: block;
+    font-size: 0.85em;
+    color: #bdc3c7;
+    margin-bottom: 4px;
+}
+.dependency-grid select,
+.dependency-grid input {
+    width: 100%;
+    background-color: #282C34;
+    color: #ecf0f1;
+    border: 1px solid #4F555E;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+.dependency-grid select:focus,
+.dependency-grid input:focus {
+    outline: none;
+    border-color: #00A86B;
+}
+.dependency-grid input:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Add Field Submit Button */
+.add-field-submit-btn {
+    margin-top: 15px;
+    width: 100%;
+    padding: 12px 20px;
+    font-size: 16px;
+    font-weight: bold;
+    background-color: #00A86B;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+.add-field-submit-btn:hover { background-color: #008754; }
+
+/* Help Tip */
+.help-tip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    font-size: 0.7em;
+    font-weight: bold;
+    border-radius: 50%;
+    background-color: #4F555E;
+    color: #bdc3c7;
+    cursor: help;
+    vertical-align: middle;
+    margin-left: 4px;
+}
+
+/* Enhanced Existing Field Items */
+.field-item-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    flex: 1;
+}
+.field-drag-handle {
+    color: #4F555E;
+    cursor: grab;
+    font-size: 1.1em;
+}
+.field-item-name {
+    font-weight: bold;
+    color: #ecf0f1;
+}
+.field-badge {
+    font-size: 0.7em;
+    padding: 2px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    font-weight: bold;
+}
+.field-badge-group { background-color: #2d4a7a; color: #8cb4f0; }
+.field-badge-hidden { background-color: #5c4a1a; color: #f5d680; }
+.field-badge-required { background-color: #5c1a22; color: #ffc7ce; }
+.field-badge-dep { background-color: #3d2e5c; color: #c4a8f0; }
+.edit-field-btn { margin-left: auto; }
+.empty-msg { color: #8e9aaf; font-style: italic; padding: 8px 0; }
+
+/* Required Star */
+.required-star {
+    color: #e74c3c;
+    font-weight: bold;
+}
+
+/* Custom Field Groups on Member Form */
+.custom-field-group {
+    margin-bottom: 15px;
+    border: 1px solid #4F555E;
+    border-radius: 6px;
+    overflow: hidden;
+}
+.custom-field-group-header {
+    background-color: #3B4048;
+    padding: 10px 15px;
+    color: #00A86B;
+    font-weight: bold;
+    font-size: 0.95em;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background-color 0.2s;
+}
+.custom-field-group-header:hover { background-color: #4F555E; }
+.group-toggle-icon {
+    font-size: 0.7em;
+    transition: transform 0.2s;
+}
+.custom-field-group-content {
+    padding: 15px;
+    background-color: #2d3139;
+}
+
+/* Checkbox & Radio Field Wrappers in Form */
+.checkbox-field-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 0;
+}
+.checkbox-field-wrapper input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    accent-color: #00A86B;
+}
+.checkbox-inline-label {
+    color: #ecf0f1;
+    font-size: 0.95em;
+    cursor: pointer;
+}
+.radio-field-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 8px 0;
+}
+.radio-field-wrapper input[type="radio"] {
+    accent-color: #00A86B;
+}
+.radio-inline-label {
+    color: #ecf0f1;
+    font-size: 0.9em;
+    cursor: pointer;
+    margin-right: 8px;
+}
+
+/* Textarea in form */
+.custom-field-wrapper textarea {
+    width: 100%;
+    background-color: #282C34;
+    color: #ecf0f1;
+    border: 1px solid #4F555E;
+    padding: 10px;
+    border-radius: 4px;
+    box-sizing: border-box;
+    font-family: inherit;
+    font-size: 14px;
+    resize: vertical;
+}
+.custom-field-wrapper textarea:focus {
+    outline: none;
+    border-color: #00A86B;
+    box-shadow: 0 0 0 3px rgba(0, 168, 107, 0.25);
+}
+
+/* File field */
+.custom-field-wrapper input[type="file"] {
+    background-color: #282C34;
+    color: #ecf0f1;
+    border: 1px solid #4F555E;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 14px;
+    width: 100%;
+    box-sizing: border-box;
+}
+.file-existing {
+    font-size: 0.8em;
+    color: #8e9aaf;
+    margin-bottom: 4px;
+}
+
+/* Validation Error */
+.field-error {
+    display: none;
+    color: #e74c3c;
+    font-size: 0.8em;
+    margin-top: 4px;
+}
+
+/* Card Collapsible Section */
+.card-collapsible-section {
+    border-top: 1px solid #4F555E;
+    margin-top: 10px;
+    padding-top: 8px;
+}
+.card-collapsible-header {
+    color: #8e9aaf;
+    font-size: 0.8em;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+.card-collapsible-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 12px;
+}
+
+/* File link in detail view */
+.file-link {
+    color: #00A86B;
+    text-decoration: none;
+}
+.file-link:hover {
+    text-decoration: underline;
+}

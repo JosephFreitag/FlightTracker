@@ -126,34 +126,152 @@
         </div>
     </div>
 
-    <!-- ===== NEW: Modal for Managing Custom Fields ===== -->
+    <!-- ===== ENHANCED: Modal for Managing Custom Fields ===== -->
     <div id="manage-fields-modal" class="modal">
-        <div class="modal-content">
+        <div class="modal-content modal-content-wide">
             <span class="close-btn">&times;</span>
             <h2>Manage Custom Fields</h2>
+
+            <!-- Access Control Bar -->
+            <div id="access-control-bar" class="access-control-bar">
+                <label for="current-role-select">Current Role:</label>
+                <select id="current-role-select">
+                    <option value="admin">Admin</option>
+                    <option value="manager">Manager</option>
+                    <option value="user">User</option>
+                </select>
+                <span id="role-description" class="role-description">Full access: create, edit, and delete fields.</span>
+            </div>
+
             <div id="custom-fields-manager">
-                <fieldset>
+                <!-- Field Groups Section -->
+                <fieldset id="field-groups-fieldset">
+                    <legend>Field Groups / Sections</legend>
+                    <div id="field-groups-list" class="field-groups-list">
+                        <!-- Populated by JS -->
+                    </div>
+                    <div class="add-group-row" id="add-group-controls">
+                        <input type="text" id="new-group-name" placeholder="New group name..." class="inline-input">
+                        <button type="button" id="add-group-btn" class="inline-btn">+ Add Group</button>
+                    </div>
+                </fieldset>
+
+                <!-- Add New Field Form -->
+                <fieldset id="add-field-fieldset">
                     <legend>Add New Field</legend>
-                    <form id="add-field-form" class="form-grid">
-                        <div>
-                            <label for="new-field-name">Field Name</label>
-                            <input type="text" id="new-field-name" placeholder="e.g., 'Favorite Snack'" required>
+                    <form id="add-field-form">
+                        <div class="form-grid">
+                            <div>
+                                <label for="new-field-name">Field Name</label>
+                                <input type="text" id="new-field-name" placeholder="e.g., 'Favorite Snack'" required>
+                            </div>
+                            <div>
+                                <label for="new-field-type">Field Type</label>
+                                <select id="new-field-type">
+                                    <option value="text">Text (Single Line)</option>
+                                    <option value="textarea">Text (Multi-line)</option>
+                                    <option value="number">Number</option>
+                                    <option value="date">Date</option>
+                                    <option value="dropdown">Dropdown (Single Selection)</option>
+                                    <option value="checkbox">Checkbox</option>
+                                    <option value="radio">Radio Buttons</option>
+                                    <option value="file">File Upload</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="new-field-group">Group</label>
+                                <select id="new-field-group">
+                                    <option value="">(No Group)</option>
+                                    <!-- Populated by JS -->
+                                </select>
+                            </div>
                         </div>
-                        <div>
-                            <label for="new-field-type">Field Type</label>
-                            <select id="new-field-type">
-                                <option value="text">Text</option>
-                                <option value="date">Date</option>
-                                <option value="number">Number</option>
-                            </select>
+
+                        <!-- Options for dropdown/radio (hidden by default) -->
+                        <div id="field-options-section" class="field-config-section" style="display:none;">
+                            <label>Options <span class="help-tip" title="Enter each option on a separate line or click Add Option">?</span></label>
+                            <div id="field-options-list" class="field-options-list">
+                                <input type="text" class="field-option-input" placeholder="Option 1">
+                                <input type="text" class="field-option-input" placeholder="Option 2">
+                            </div>
+                            <button type="button" id="add-option-btn" class="inline-btn-sm">+ Add Option</button>
                         </div>
-                        <button type="submit">Add Field</button>
+
+                        <!-- Validation Rules -->
+                        <div class="field-config-section">
+                            <h4 class="config-section-title">Validation Rules</h4>
+                            <div class="validation-grid">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="new-field-required"> Required Field
+                                </label>
+                                <div id="validation-text-rules" class="validation-sub" style="display:none;">
+                                    <div><label>Min Length</label><input type="number" id="new-field-min-length" min="0" placeholder="0"></div>
+                                    <div><label>Max Length</label><input type="number" id="new-field-max-length" min="0" placeholder="None"></div>
+                                    <div class="validation-wide"><label>Custom Regex <span class="help-tip" title="Enter a regular expression pattern to validate input, e.g., ^[A-Z].* for uppercase start">?</span></label><input type="text" id="new-field-regex" placeholder="e.g., ^[A-Za-z]+$"></div>
+                                    <div class="validation-wide"><label>Regex Error Message</label><input type="text" id="new-field-regex-msg" placeholder="Custom error message if regex fails"></div>
+                                </div>
+                                <div id="validation-number-rules" class="validation-sub" style="display:none;">
+                                    <div><label>Min Value</label><input type="number" id="new-field-min-value" placeholder="None"></div>
+                                    <div><label>Max Value</label><input type="number" id="new-field-max-value" placeholder="None"></div>
+                                </div>
+                                <div id="validation-date-rules" class="validation-sub" style="display:none;">
+                                    <div><label>Earliest Date</label><input type="date" id="new-field-min-date"></div>
+                                    <div><label>Latest Date</label><input type="date" id="new-field-max-date"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Display Settings -->
+                        <div class="field-config-section">
+                            <h4 class="config-section-title">Display Settings</h4>
+                            <div class="display-settings-grid">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="new-field-show-card" checked> Show on Member Card
+                                </label>
+                                <label class="checkbox-label">
+                                    <input type="checkbox" id="new-field-visible" checked> Visible to All Roles
+                                </label>
+                                <div>
+                                    <label for="new-field-card-display">Card Display Location</label>
+                                    <select id="new-field-card-display">
+                                        <option value="main">Main Profile Area</option>
+                                        <option value="collapsible">Collapsible Section</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label for="new-field-help-text">Help Text / Tooltip</label>
+                                    <input type="text" id="new-field-help-text" placeholder="Helpful description shown to users">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Dependency Logic -->
+                        <div class="field-config-section">
+                            <h4 class="config-section-title">Field Dependency <span class="help-tip" title="Only show this field when another field has a specific value">?</span></h4>
+                            <div class="dependency-grid">
+                                <div>
+                                    <label for="new-field-dep-field">Depends on Field</label>
+                                    <select id="new-field-dep-field">
+                                        <option value="">(None - Always Visible)</option>
+                                        <!-- Populated by JS -->
+                                    </select>
+                                </div>
+                                <div>
+                                    <label for="new-field-dep-value">Show When Value Is</label>
+                                    <input type="text" id="new-field-dep-value" placeholder="Enter value..." disabled>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="add-field-submit-btn">Add Field</button>
                     </form>
                 </fieldset>
+
+                <!-- Existing Fields -->
                 <fieldset>
                     <legend>Existing Fields</legend>
                     <div id="existing-fields-list">
-                        <!-- List of existing fields will be populated here -->
+                        <!-- Populated by JS -->
                     </div>
                 </fieldset>
             </div>

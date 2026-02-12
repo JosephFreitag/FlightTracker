@@ -22,6 +22,8 @@ const detailedViewModal = document.getElementById('detailed-view-modal');
 let ALL_MEMBERS_CACHE = [];
 let CUSTOM_FIELDS_CACHE = [];
 let FLIGHTS_CACHE = [];
+let FIELD_GROUPS_CACHE = [];
+let CURRENT_ROLE = 'admin';
 let activeFlightId = null;
 
 // --- CUSTOM DIALOG FUNCTIONS (replaces prompt/alert/confirm) ---
@@ -168,6 +170,62 @@ async function getCachedFlights(forceRefresh = false) {
     FLIGHTS_CACHE = await getFlightsRequest;
     return FLIGHTS_CACHE;
 }
+
+// --- FIELD GROUPS ---
+async function getFieldGroups() {
+    try {
+        const snapshot = await database.ref('/_config/fieldGroups').get();
+        if (!snapshot.exists()) return [];
+        const value = snapshot.val();
+        if (Array.isArray(value)) return value;
+        if (typeof value === 'object' && value !== null) return Object.values(value);
+        return [];
+    } catch (error) {
+        console.error("Error fetching field groups:", error);
+        return [];
+    }
+}
+
+async function saveFieldGroups(groups) {
+    try {
+        await database.ref('/_config/fieldGroups').set(groups);
+        FIELD_GROUPS_CACHE = groups;
+    } catch (error) {
+        console.error("Error saving field groups:", error);
+        customAlert("Error saving field groups.", "Error");
+    }
+}
+
+let getGroupsRequest = null;
+async function getCachedGroups(forceRefresh = false) {
+    if (FIELD_GROUPS_CACHE.length > 0 && !forceRefresh) return FIELD_GROUPS_CACHE;
+    if (!getGroupsRequest) {
+        getGroupsRequest = getFieldGroups().finally(() => { getGroupsRequest = null; });
+    }
+    FIELD_GROUPS_CACHE = await getGroupsRequest;
+    return FIELD_GROUPS_CACHE;
+}
+
+// --- ACCESS CONTROL ---
+async function getAccessRole() {
+    try {
+        const snapshot = await database.ref('/_config/accessRole').get();
+        if (!snapshot.exists()) return 'admin';
+        return snapshot.val() || 'admin';
+    } catch (error) { return 'admin'; }
+}
+
+async function saveAccessRole(role) {
+    try {
+        await database.ref('/_config/accessRole').set(role);
+        CURRENT_ROLE = role;
+    } catch (error) {
+        console.error("Error saving access role:", error);
+    }
+}
+
+function canManageFields() { return CURRENT_ROLE === 'admin'; }
+function canViewFields() { return true; } // All roles can view
 
 async function getAllMembers() {
     const teamNames = ['brass', 'flight-leads', 'inbound', 'sbirs'];
@@ -404,10 +462,11 @@ function findMemberById(id, memberList) {
 // --- RENDERING & UI FUNCTIONS ---
 
 async function renderAll(forceRefresh = false) {
-    const [allMembers, customFields, flights] = await Promise.all([
+    const [allMembers, customFields, flights, groups] = await Promise.all([
         getCachedMembers(forceRefresh),
         getCachedFields(forceRefresh),
-        getCachedFlights(forceRefresh)
+        getCachedFlights(forceRefresh),
+        getCachedGroups(forceRefresh)
     ]);
 
     // Auto-create default flight if none exist and there are members
@@ -701,20 +760,30 @@ function createMemberCardElement(member, allMembers, customFields) {
     gridItems.push(`<strong>Date of Rank:</strong><span>${member.dorDate || 'N/A'}</span>`);
     gridItems.push(`<strong>Hometown:</strong><span>${member.hometown || 'N/A'}</span>`);
 
+    const collapsibleItems = [];
     if (member.customData && customFields) {
-        customFields.forEach(field => {
+        const visibleFields = customFields.filter(f => f.visible !== false || CURRENT_ROLE === 'admin');
+        visibleFields.sort((a, b) => (a.order || 0) - (b.order || 0));
+        visibleFields.forEach(field => {
             if (field.showOnCard) {
-                const value = member.customData[field.id];
-                if (value) {
-                    gridItems.push(`<strong>${field.name}:</strong><span>${value}</span>`);
-                }
+                let value = member.customData[field.id];
+                if (field.type === 'checkbox') value = value === 'true' || value === true ? 'Yes' : 'No';
+                else if (!value) return;
+                const item = `<strong>${field.name}:</strong><span>${value}</span>`;
+                if (field.cardDisplay === 'collapsible') collapsibleItems.push(item);
+                else gridItems.push(item);
             }
         });
     }
 
+    let collapsibleHTML = '';
+    if (collapsibleItems.length > 0) {
+        collapsibleHTML = `<div class="card-collapsible-section"><div class="card-collapsible-header">More Details</div><div class="card-collapsible-grid card-detail-grid">${collapsibleItems.join('')}</div></div>`;
+    }
+
     const bodyGrid = `<div class="card-detail-grid">${gridItems.join('')}</div>`;
     const eligibilityDiv = `<div class="eligibility-cell eligibility-${eligibility.className}">${eligibilityHTML}</div>`;
-    const bodyHTML = `<div class="card-body">${bodyGrid}${eligibilityDiv}</div>`;
+    const bodyHTML = `<div class="card-body">${bodyGrid}${collapsibleHTML}${eligibilityDiv}</div>`;
 
     card.innerHTML = headerHTML + bodyHTML;
     card.addEventListener('dragstart', handleDragStart);
@@ -767,30 +836,199 @@ function renderCustomFieldsOnForm(memberData = null) {
     const fieldset = document.getElementById('custom-fields-fieldset');
     container.innerHTML = '';
 
-    if (CUSTOM_FIELDS_CACHE.length === 0) {
+    // Filter fields visible to current role
+    const visibleFields = CUSTOM_FIELDS_CACHE.filter(f => f.visible !== false || CURRENT_ROLE === 'admin');
+    if (visibleFields.length === 0) {
         fieldset.style.display = 'none';
         return;
     }
 
     fieldset.style.display = 'block';
-    CUSTOM_FIELDS_CACHE.forEach(field => {
-        const value = memberData?.customData?.[field.id] || '';
-        const fieldId = `custom_${field.id}`;
-        
-        const div = document.createElement('div');
-        const label = document.createElement('label');
-        label.setAttribute('for', fieldId);
-        label.textContent = field.name;
 
-        const input = document.createElement('input');
-        input.type = field.type;
-        input.id = fieldId;
-        input.name = fieldId;
-        input.value = value;
-        
-        div.appendChild(label);
-        div.appendChild(input);
-        container.appendChild(div);
+    // Sort by order
+    const sorted = [...visibleFields].sort((a, b) => (a.order || 0) - (b.order || 0));
+
+    // Group fields
+    const groups = {};
+    const ungrouped = [];
+    sorted.forEach(field => {
+        if (field.group) {
+            if (!groups[field.group]) groups[field.group] = [];
+            groups[field.group].push(field);
+        } else {
+            ungrouped.push(field);
+        }
+    });
+
+    // Render grouped fields
+    const orderedGroups = [...FIELD_GROUPS_CACHE].sort((a, b) => (a.order || 0) - (b.order || 0));
+    orderedGroups.forEach(group => {
+        const groupFields = groups[group.id];
+        if (!groupFields || groupFields.length === 0) return;
+
+        const groupDiv = document.createElement('div');
+        groupDiv.className = 'custom-field-group';
+        const header = document.createElement('div');
+        header.className = 'custom-field-group-header';
+        header.innerHTML = `<span class="group-toggle-icon">▼</span> ${group.name}`;
+        header.addEventListener('click', () => {
+            const content = groupDiv.querySelector('.custom-field-group-content');
+            const icon = header.querySelector('.group-toggle-icon');
+            const isCollapsed = content.style.display === 'none';
+            content.style.display = isCollapsed ? 'grid' : 'none';
+            icon.textContent = isCollapsed ? '▼' : '▶';
+        });
+        groupDiv.appendChild(header);
+
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'custom-field-group-content form-grid';
+        groupFields.forEach(field => contentDiv.appendChild(createFieldInput(field, memberData)));
+        groupDiv.appendChild(contentDiv);
+        container.appendChild(groupDiv);
+    });
+
+    // Render ungrouped fields
+    if (ungrouped.length > 0) {
+        const ungroupedGrid = document.createElement('div');
+        ungroupedGrid.className = 'form-grid';
+        ungrouped.forEach(field => ungroupedGrid.appendChild(createFieldInput(field, memberData)));
+        container.appendChild(ungroupedGrid);
+    }
+
+    // Apply dependency logic
+    applyFieldDependencies(memberData);
+}
+
+function createFieldInput(field, memberData) {
+    const value = memberData?.customData?.[field.id] || '';
+    const fieldId = `custom_${field.id}`;
+    const div = document.createElement('div');
+    div.className = 'custom-field-wrapper';
+    div.dataset.customFieldId = field.id;
+
+    const label = document.createElement('label');
+    label.setAttribute('for', fieldId);
+    label.innerHTML = field.name + (field.required ? ' <span class="required-star">*</span>' : '');
+    if (field.helpText) {
+        label.innerHTML += ` <span class="help-tip" title="${field.helpText}">?</span>`;
+    }
+    div.appendChild(label);
+
+    let inputEl;
+    switch (field.type) {
+        case 'textarea':
+            inputEl = document.createElement('textarea');
+            inputEl.id = fieldId;
+            inputEl.name = fieldId;
+            inputEl.value = value;
+            inputEl.rows = 3;
+            break;
+        case 'dropdown':
+            inputEl = document.createElement('select');
+            inputEl.id = fieldId;
+            inputEl.name = fieldId;
+            inputEl.innerHTML = '<option value="">Select...</option>';
+            (field.options || []).forEach(opt => {
+                inputEl.innerHTML += `<option value="${opt}" ${value === opt ? 'selected' : ''}>${opt}</option>`;
+            });
+            break;
+        case 'checkbox':
+            inputEl = document.createElement('div');
+            inputEl.className = 'checkbox-field-wrapper';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.id = fieldId;
+            cb.name = fieldId;
+            cb.value = 'true';
+            cb.checked = value === 'true' || value === true;
+            const cbLabel = document.createElement('label');
+            cbLabel.setAttribute('for', fieldId);
+            cbLabel.textContent = 'Yes';
+            cbLabel.className = 'checkbox-inline-label';
+            inputEl.appendChild(cb);
+            inputEl.appendChild(cbLabel);
+            break;
+        case 'radio':
+            inputEl = document.createElement('div');
+            inputEl.className = 'radio-field-wrapper';
+            (field.options || []).forEach((opt, i) => {
+                const radioId = `${fieldId}_${i}`;
+                const rb = document.createElement('input');
+                rb.type = 'radio';
+                rb.name = fieldId;
+                rb.id = radioId;
+                rb.value = opt;
+                rb.checked = value === opt;
+                const rbLabel = document.createElement('label');
+                rbLabel.setAttribute('for', radioId);
+                rbLabel.textContent = opt;
+                rbLabel.className = 'radio-inline-label';
+                inputEl.appendChild(rb);
+                inputEl.appendChild(rbLabel);
+            });
+            break;
+        case 'file':
+            inputEl = document.createElement('input');
+            inputEl.type = 'file';
+            inputEl.id = fieldId;
+            inputEl.name = fieldId;
+            if (value) {
+                const existing = document.createElement('div');
+                existing.className = 'file-existing';
+                existing.innerHTML = `<span class="file-existing-name">Current: ${value}</span>`;
+                div.appendChild(existing);
+            }
+            break;
+        default: // text, number, date
+            inputEl = document.createElement('input');
+            inputEl.type = field.type === 'text' ? 'text' : field.type;
+            inputEl.id = fieldId;
+            inputEl.name = fieldId;
+            inputEl.value = value;
+            if (field.validation) {
+                if (field.validation.minLength) inputEl.minLength = field.validation.minLength;
+                if (field.validation.maxLength) inputEl.maxLength = field.validation.maxLength;
+                if (field.validation.minValue !== undefined && field.validation.minValue !== null) inputEl.min = field.validation.minValue;
+                if (field.validation.maxValue !== undefined && field.validation.maxValue !== null) inputEl.max = field.validation.maxValue;
+                if (field.validation.minDate) inputEl.min = field.validation.minDate;
+                if (field.validation.maxDate) inputEl.max = field.validation.maxDate;
+            }
+            break;
+    }
+
+    if (inputEl) {
+        div.appendChild(inputEl);
+        // Add change listener for dependency fields
+        if (inputEl.tagName === 'SELECT' || inputEl.tagName === 'INPUT') {
+            inputEl.addEventListener('change', () => applyFieldDependencies());
+        }
+    }
+
+    // Validation error placeholder
+    const errDiv = document.createElement('div');
+    errDiv.className = 'field-error';
+    errDiv.id = `error_${field.id}`;
+    div.appendChild(errDiv);
+
+    return div;
+}
+
+function applyFieldDependencies(memberData = null) {
+    CUSTOM_FIELDS_CACHE.forEach(field => {
+        if (!field.dependency || !field.dependency.fieldId) return;
+        const wrapper = document.querySelector(`.custom-field-wrapper[data-custom-field-id="${field.id}"]`);
+        if (!wrapper) return;
+
+        const depFieldId = `custom_${field.dependency.fieldId}`;
+        const depInput = document.getElementById(depFieldId) || document.querySelector(`[name="${depFieldId}"]`);
+        let currentVal = '';
+        if (depInput) {
+            if (depInput.type === 'checkbox') currentVal = depInput.checked ? 'true' : 'false';
+            else currentVal = depInput.value;
+        }
+
+        const shouldShow = currentVal === field.dependency.value;
+        wrapper.style.display = shouldShow ? '' : 'none';
     });
 }
 
@@ -822,8 +1060,13 @@ async function openDetailModal(memberId) {
     }
 
     if (member.customData && CUSTOM_FIELDS_CACHE) {
-        CUSTOM_FIELDS_CACHE.forEach(field => {
-            const value = member.customData[field.id] || 'N/A';
+        const visibleFields = CUSTOM_FIELDS_CACHE.filter(f => f.visible !== false || CURRENT_ROLE === 'admin');
+        const sorted = [...visibleFields].sort((a, b) => (a.order || 0) - (b.order || 0));
+        sorted.forEach(field => {
+            let value = member.customData[field.id];
+            if (field.type === 'checkbox') value = value === 'true' || value === true ? 'Yes' : 'No';
+            else if (field.type === 'file' && value) value = `<a href="#" class="file-link">${value}</a>`;
+            else value = value || 'N/A';
             details.push(`<strong>${field.name}:</strong><span>${value}</span>`);
         });
     }
@@ -855,9 +1098,115 @@ async function updateSupervisorDropdown(allMembers, currentMemberId = null) {
 
 // --- CUSTOM FIELD MANAGER LOGIC ---
 
+const FIELD_TYPE_LABELS = {
+    text: 'Text', textarea: 'Multi-line', number: 'Number', date: 'Date',
+    dropdown: 'Dropdown', checkbox: 'Checkbox', radio: 'Radio', file: 'File'
+};
+
 async function openFieldManagerModal() {
+    const [fields, groups] = await Promise.all([getCachedFields(true), getCachedGroups(true)]);
+    CURRENT_ROLE = await getAccessRole();
+    const roleSelect = document.getElementById('current-role-select');
+    roleSelect.value = CURRENT_ROLE;
+    updateRoleDescription();
+    applyRoleRestrictions();
+    renderGroupsList(groups);
+    populateGroupDropdown(groups);
+    populateDependencyDropdown(fields);
     await renderFieldManagerList();
     fieldsModal.style.display = 'block';
+}
+
+function updateRoleDescription() {
+    const desc = document.getElementById('role-description');
+    if (CURRENT_ROLE === 'admin') desc.textContent = 'Full access: create, edit, and delete fields.';
+    else if (CURRENT_ROLE === 'manager') desc.textContent = 'View and use fields. Cannot modify or delete.';
+    else desc.textContent = 'View-only access to custom fields.';
+}
+
+function applyRoleRestrictions() {
+    const isAdmin = canManageFields();
+    const addFieldset = document.getElementById('add-field-fieldset');
+    const groupControls = document.getElementById('add-group-controls');
+    if (addFieldset) addFieldset.style.display = isAdmin ? 'block' : 'none';
+    if (groupControls) groupControls.style.display = isAdmin ? 'flex' : 'none';
+}
+
+function renderGroupsList(groups) {
+    const container = document.getElementById('field-groups-list');
+    container.innerHTML = '';
+    if (groups.length === 0) {
+        container.innerHTML = '<p class="empty-msg">No groups defined. Fields will appear ungrouped.</p>';
+        return;
+    }
+    groups.forEach((group, index) => {
+        const item = document.createElement('div');
+        item.className = 'field-group-item';
+        item.draggable = true;
+        item.dataset.groupIndex = index;
+        const isAdmin = canManageFields();
+        item.innerHTML = `
+            <span class="group-drag-handle" title="Drag to reorder">${isAdmin ? '⠿' : ''}</span>
+            <span class="group-name" data-id="${group.id}">${group.name}</span>
+            <span class="group-field-count">${countFieldsInGroup(group.id)} fields</span>
+            ${isAdmin ? `<button class="rename-group-btn inline-btn-sm" data-id="${group.id}">Rename</button>
+            <button class="delete-group-btn inline-btn-sm btn-danger-sm" data-id="${group.id}">Delete</button>` : ''}
+        `;
+        container.appendChild(item);
+    });
+    if (canManageFields()) setupGroupDragAndDrop(container);
+}
+
+function countFieldsInGroup(groupId) {
+    return CUSTOM_FIELDS_CACHE.filter(f => f.group === groupId).length;
+}
+
+function setupGroupDragAndDrop(container) {
+    let draggedIndex = null;
+    container.querySelectorAll('.field-group-item').forEach(item => {
+        item.addEventListener('dragstart', (e) => {
+            draggedIndex = parseInt(item.dataset.groupIndex);
+            e.dataTransfer.effectAllowed = 'move';
+            setTimeout(() => item.classList.add('dragging'), 0);
+        });
+        item.addEventListener('dragend', () => item.classList.remove('dragging'));
+        item.addEventListener('dragover', (e) => e.preventDefault());
+        item.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            const targetIndex = parseInt(item.dataset.groupIndex);
+            if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                const moved = FIELD_GROUPS_CACHE.splice(draggedIndex, 1)[0];
+                FIELD_GROUPS_CACHE.splice(targetIndex, 0, moved);
+                await saveFieldGroups(FIELD_GROUPS_CACHE);
+                renderGroupsList(FIELD_GROUPS_CACHE);
+                populateGroupDropdown(FIELD_GROUPS_CACHE);
+            }
+        });
+    });
+}
+
+function populateGroupDropdown(groups) {
+    const sel = document.getElementById('new-field-group');
+    sel.innerHTML = '<option value="">(No Group)</option>';
+    groups.forEach(g => {
+        sel.innerHTML += `<option value="${g.id}">${g.name}</option>`;
+    });
+}
+
+function populateDependencyDropdown(fields) {
+    const sel = document.getElementById('new-field-dep-field');
+    sel.innerHTML = '<option value="">(None - Always Visible)</option>';
+    fields.forEach(f => {
+        sel.innerHTML += `<option value="${f.id}">${f.name} (${FIELD_TYPE_LABELS[f.type] || f.type})</option>`;
+    });
+}
+
+function toggleFieldTypeOptions() {
+    const type = document.getElementById('new-field-type').value;
+    document.getElementById('field-options-section').style.display = (type === 'dropdown' || type === 'radio') ? 'block' : 'none';
+    document.getElementById('validation-text-rules').style.display = (type === 'text' || type === 'textarea') ? 'block' : 'none';
+    document.getElementById('validation-number-rules').style.display = (type === 'number') ? 'block' : 'none';
+    document.getElementById('validation-date-rules').style.display = (type === 'date') ? 'block' : 'none';
 }
 
 async function renderFieldManagerList() {
@@ -865,73 +1214,280 @@ async function renderFieldManagerList() {
     const listContainer = document.getElementById('existing-fields-list');
     listContainer.innerHTML = '';
     if (fields.length === 0) {
-        listContainer.innerHTML = '<p>No custom fields defined yet.</p>';
+        listContainer.innerHTML = '<p class="empty-msg">No custom fields defined yet.</p>';
         return;
     }
 
-    fields.forEach(field => {
+    const isAdmin = canManageFields();
+    const sortedFields = [...fields].sort((a, b) => (a.order || 0) - (b.order || 0));
+
+    sortedFields.forEach((field, index) => {
         const item = document.createElement('div');
         item.className = 'existing-field-item';
-        const isChecked = field.showOnCard ? 'checked' : '';
+        item.draggable = isAdmin;
+        item.dataset.fieldIndex = index;
+        item.dataset.fieldId = field.id;
+
+        const groupObj = FIELD_GROUPS_CACHE.find(g => g.id === field.group);
+        const groupLabel = groupObj ? groupObj.name : '';
+        const visLabel = field.visible === false ? '<span class="field-badge field-badge-hidden">Hidden</span>' : '';
+        const reqLabel = field.required ? '<span class="field-badge field-badge-required">Required</span>' : '';
+        const depLabel = field.dependency && field.dependency.fieldId ? '<span class="field-badge field-badge-dep">Conditional</span>' : '';
+
         item.innerHTML = `
-            <div>
-                <span>${field.name}</span>
-                <span class="field-type">${field.type}</span>
+            <div class="field-item-info">
+                ${isAdmin ? '<span class="field-drag-handle" title="Drag to reorder">⠿</span>' : ''}
+                <span class="field-item-name">${field.name}</span>
+                <span class="field-type">${FIELD_TYPE_LABELS[field.type] || field.type}</span>
+                ${groupLabel ? `<span class="field-badge field-badge-group">${groupLabel}</span>` : ''}
+                ${visLabel}${reqLabel}${depLabel}
             </div>
             <div class="existing-field-item-controls">
-                <label class="toggle-switch">
-                    <input type="checkbox" class="show-on-card-toggle" data-id="${field.id}" ${isChecked}>
+                <label class="toggle-switch" title="Show on member card">
+                    <input type="checkbox" class="show-on-card-toggle" data-id="${field.id}" ${field.showOnCard ? 'checked' : ''} ${!isAdmin ? 'disabled' : ''}>
                     <span class="slider"></span>
                 </label>
-                <button class="delete-field-btn" data-id="${field.id}">Delete</button>
+                ${isAdmin ? `<button class="edit-field-btn inline-btn-sm" data-id="${field.id}">Edit</button>` : ''}
+                ${isAdmin ? `<button class="delete-field-btn" data-id="${field.id}">Delete</button>` : ''}
             </div>
         `;
         listContainer.appendChild(item);
     });
+
+    if (isAdmin) setupFieldDragAndDrop(listContainer);
+}
+
+function setupFieldDragAndDrop(container) {
+    let draggedId = null;
+    container.querySelectorAll('.existing-field-item').forEach(item => {
+        item.addEventListener('dragstart', (e) => {
+            draggedId = item.dataset.fieldId;
+            e.dataTransfer.effectAllowed = 'move';
+            setTimeout(() => item.classList.add('dragging'), 0);
+        });
+        item.addEventListener('dragend', () => item.classList.remove('dragging'));
+        item.addEventListener('dragover', (e) => e.preventDefault());
+        item.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            const targetId = item.dataset.fieldId;
+            if (draggedId && draggedId !== targetId) {
+                const draggedIdx = CUSTOM_FIELDS_CACHE.findIndex(f => f.id === draggedId);
+                const targetIdx = CUSTOM_FIELDS_CACHE.findIndex(f => f.id === targetId);
+                if (draggedIdx > -1 && targetIdx > -1) {
+                    const moved = CUSTOM_FIELDS_CACHE.splice(draggedIdx, 1)[0];
+                    CUSTOM_FIELDS_CACHE.splice(targetIdx, 0, moved);
+                    CUSTOM_FIELDS_CACHE.forEach((f, i) => f.order = i);
+                    await saveCustomFields(CUSTOM_FIELDS_CACHE);
+                    await renderFieldManagerList();
+                }
+            }
+        });
+    });
+}
+
+function getOptionsFromForm() {
+    const inputs = document.querySelectorAll('#field-options-list .field-option-input');
+    return Array.from(inputs).map(i => i.value.trim()).filter(v => v);
 }
 
 async function handleAddFieldSubmit(event) {
     event.preventDefault();
-    const nameInput = document.getElementById('new-field-name');
-    const typeInput = document.getElementById('new-field-type');
-    
-    const newField = {
-        id: `field_${Date.now()}`,
-        name: nameInput.value.trim(),
-        type: typeInput.value,
-        showOnCard: true
-    };
+    if (!canManageFields()) {
+        await customAlert("You don't have permission to add fields.", "Access Denied");
+        return;
+    }
 
-    if (!newField.name) {
+    const name = document.getElementById('new-field-name').value.trim();
+    const type = document.getElementById('new-field-type').value;
+
+    if (!name) {
         await customAlert("Field name cannot be empty.", "Validation");
         return;
     }
 
+    const newField = {
+        id: `field_${Date.now()}`,
+        name,
+        type,
+        group: document.getElementById('new-field-group').value || '',
+        order: CUSTOM_FIELDS_CACHE.length,
+        showOnCard: document.getElementById('new-field-show-card').checked,
+        visible: document.getElementById('new-field-visible').checked,
+        cardDisplay: document.getElementById('new-field-card-display').value,
+        helpText: document.getElementById('new-field-help-text').value.trim(),
+        required: document.getElementById('new-field-required').checked,
+        validation: {},
+        options: [],
+        dependency: null
+    };
+
+    // Collect options for dropdown/radio
+    if (type === 'dropdown' || type === 'radio') {
+        newField.options = getOptionsFromForm();
+        if (newField.options.length < 2) {
+            await customAlert("Dropdown and Radio fields need at least 2 options.", "Validation");
+            return;
+        }
+    }
+
+    // Collect validation rules
+    if (type === 'text' || type === 'textarea') {
+        const minLen = document.getElementById('new-field-min-length').value;
+        const maxLen = document.getElementById('new-field-max-length').value;
+        const regex = document.getElementById('new-field-regex').value.trim();
+        const regexMsg = document.getElementById('new-field-regex-msg').value.trim();
+        if (minLen) newField.validation.minLength = parseInt(minLen);
+        if (maxLen) newField.validation.maxLength = parseInt(maxLen);
+        if (regex) { newField.validation.regex = regex; newField.validation.regexMessage = regexMsg || 'Invalid format.'; }
+    }
+    if (type === 'number') {
+        const minVal = document.getElementById('new-field-min-value').value;
+        const maxVal = document.getElementById('new-field-max-value').value;
+        if (minVal !== '') newField.validation.minValue = parseFloat(minVal);
+        if (maxVal !== '') newField.validation.maxValue = parseFloat(maxVal);
+    }
+    if (type === 'date') {
+        const minDate = document.getElementById('new-field-min-date').value;
+        const maxDate = document.getElementById('new-field-max-date').value;
+        if (minDate) newField.validation.minDate = minDate;
+        if (maxDate) newField.validation.maxDate = maxDate;
+    }
+
+    // Dependency
+    const depField = document.getElementById('new-field-dep-field').value;
+    const depValue = document.getElementById('new-field-dep-value').value.trim();
+    if (depField) {
+        newField.dependency = { fieldId: depField, value: depValue };
+    }
+
     const updatedFields = [...CUSTOM_FIELDS_CACHE, newField];
     await saveCustomFields(updatedFields);
+    populateDependencyDropdown(updatedFields);
     await renderFieldManagerList();
     addFieldForm.reset();
+    toggleFieldTypeOptions();
+    // Reset options list
+    document.getElementById('field-options-list').innerHTML =
+        '<input type="text" class="field-option-input" placeholder="Option 1"><input type="text" class="field-option-input" placeholder="Option 2">';
 }
 
 async function handleFieldListClick(event) {
-    const fieldId = event.target.dataset.id;
+    const target = event.target;
+    const fieldId = target.dataset?.id;
     if (!fieldId) return;
 
-    if (event.target.matches('.delete-field-btn')) {
+    if (target.matches('.delete-field-btn')) {
+        if (!canManageFields()) return;
         if (await customConfirm("Are you sure you want to delete this field? This cannot be undone.", "Delete Field", "Delete")) {
             const updatedFields = CUSTOM_FIELDS_CACHE.filter(f => f.id !== fieldId);
             await saveCustomFields(updatedFields);
+            populateDependencyDropdown(updatedFields);
             await renderFieldManagerList();
             await renderAll(true);
         }
-    } else if (event.target.matches('.show-on-card-toggle')) {
+    } else if (target.matches('.show-on-card-toggle')) {
+        if (!canManageFields()) { target.checked = !target.checked; return; }
         const field = CUSTOM_FIELDS_CACHE.find(f => f.id === fieldId);
         if (field) {
-            field.showOnCard = event.target.checked;
+            field.showOnCard = target.checked;
             await saveCustomFields(CUSTOM_FIELDS_CACHE);
             await renderAll(true);
         }
+    } else if (target.matches('.edit-field-btn')) {
+        if (!canManageFields()) return;
+        await openEditFieldDialog(fieldId);
     }
+}
+
+async function openEditFieldDialog(fieldId) {
+    const field = CUSTOM_FIELDS_CACHE.find(f => f.id === fieldId);
+    if (!field) return;
+    const newName = await customPrompt("Edit field name:", field.name, "Edit Field");
+    if (newName === null) return;
+    if (!newName.trim()) {
+        await customAlert("Field name cannot be empty.", "Validation");
+        return;
+    }
+    field.name = newName.trim();
+    await saveCustomFields(CUSTOM_FIELDS_CACHE);
+    await renderFieldManagerList();
+    await renderAll(true);
+}
+
+async function handleAddGroup() {
+    if (!canManageFields()) return;
+    const nameInput = document.getElementById('new-group-name');
+    const name = nameInput.value.trim();
+    if (!name) {
+        await customAlert("Group name cannot be empty.", "Validation");
+        return;
+    }
+    const newGroup = { id: `group_${Date.now()}`, name, order: FIELD_GROUPS_CACHE.length };
+    const updated = [...FIELD_GROUPS_CACHE, newGroup];
+    await saveFieldGroups(updated);
+    renderGroupsList(updated);
+    populateGroupDropdown(updated);
+    nameInput.value = '';
+}
+
+async function handleGroupsClick(event) {
+    const target = event.target;
+    const groupId = target.dataset?.id;
+    if (!groupId || !canManageFields()) return;
+
+    if (target.matches('.delete-group-btn')) {
+        if (await customConfirm("Delete this group? Fields in this group will become ungrouped.", "Delete Group", "Delete")) {
+            CUSTOM_FIELDS_CACHE.forEach(f => { if (f.group === groupId) f.group = ''; });
+            await saveCustomFields(CUSTOM_FIELDS_CACHE);
+            const updated = FIELD_GROUPS_CACHE.filter(g => g.id !== groupId);
+            await saveFieldGroups(updated);
+            renderGroupsList(updated);
+            populateGroupDropdown(updated);
+            await renderFieldManagerList();
+        }
+    } else if (target.matches('.rename-group-btn')) {
+        const group = FIELD_GROUPS_CACHE.find(g => g.id === groupId);
+        if (!group) return;
+        const newName = await customPrompt("Rename group:", group.name, "Rename Group");
+        if (newName === null || !newName.trim()) return;
+        group.name = newName.trim();
+        await saveFieldGroups(FIELD_GROUPS_CACHE);
+        renderGroupsList(FIELD_GROUPS_CACHE);
+        populateGroupDropdown(FIELD_GROUPS_CACHE);
+        await renderFieldManagerList();
+    }
+}
+
+// --- CUSTOM FIELD VALIDATION ---
+function validateCustomField(field, value) {
+    const errors = [];
+    if (field.required && (!value || (typeof value === 'string' && !value.trim()))) {
+        errors.push(`${field.name} is required.`);
+        return errors;
+    }
+    if (!value && !field.required) return errors;
+
+    const v = field.validation || {};
+    if ((field.type === 'text' || field.type === 'textarea') && typeof value === 'string') {
+        if (v.minLength && value.length < v.minLength) errors.push(`${field.name} must be at least ${v.minLength} characters.`);
+        if (v.maxLength && value.length > v.maxLength) errors.push(`${field.name} must be at most ${v.maxLength} characters.`);
+        if (v.regex) {
+            try {
+                if (!new RegExp(v.regex).test(value)) errors.push(v.regexMessage || `${field.name} has invalid format.`);
+            } catch (e) { /* invalid regex stored, skip */ }
+        }
+    }
+    if (field.type === 'number' && value !== '') {
+        const num = parseFloat(value);
+        if (isNaN(num)) { errors.push(`${field.name} must be a number.`); return errors; }
+        if (v.minValue !== undefined && v.minValue !== null && num < v.minValue) errors.push(`${field.name} must be at least ${v.minValue}.`);
+        if (v.maxValue !== undefined && v.maxValue !== null && num > v.maxValue) errors.push(`${field.name} must be at most ${v.maxValue}.`);
+    }
+    if (field.type === 'date' && value) {
+        if (v.minDate && value < v.minDate) errors.push(`${field.name} cannot be before ${v.minDate}.`);
+        if (v.maxDate && value > v.maxDate) errors.push(`${field.name} cannot be after ${v.maxDate}.`);
+    }
+    return errors;
 }
 
 
@@ -1015,9 +1571,50 @@ async function handleFormSubmit(event) {
     const formData = new FormData(addMemberForm);
     const memberData = Object.fromEntries(formData.entries());
     const isEditing = !!document.getElementById('edit-row-id').value;
-    
+
     if (!isEditing) {
         memberData.rowId = `card-${Date.now()}`;
+    }
+
+    // Validate custom fields
+    const allErrors = [];
+    for (const field of CUSTOM_FIELDS_CACHE) {
+        const key = `custom_${field.id}`;
+        let value = memberData[key] || '';
+        // Handle checkbox (unchecked checkboxes aren't in FormData)
+        if (field.type === 'checkbox') {
+            const cb = document.getElementById(key);
+            value = cb && cb.checked ? 'true' : 'false';
+            memberData[key] = value;
+        }
+        // Handle radio
+        if (field.type === 'radio') {
+            const selected = document.querySelector(`input[name="${key}"]:checked`);
+            value = selected ? selected.value : '';
+            memberData[key] = value;
+        }
+        // Handle file (store filename only)
+        if (field.type === 'file') {
+            const fileInput = document.getElementById(key);
+            if (fileInput && fileInput.files.length > 0) {
+                memberData[key] = fileInput.files[0].name;
+            } else {
+                delete memberData[key]; // Keep existing value
+            }
+        }
+        const errors = validateCustomField(field, value);
+        if (errors.length > 0) {
+            allErrors.push(...errors);
+            const errEl = document.getElementById(`error_${field.id}`);
+            if (errEl) { errEl.textContent = errors[0]; errEl.style.display = 'block'; }
+        } else {
+            const errEl = document.getElementById(`error_${field.id}`);
+            if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
+        }
+    }
+    if (allErrors.length > 0) {
+        await customAlert(allErrors.join('\n'), 'Validation Errors');
+        return;
     }
 
     if (['Flight Chief', 'Flight Commander'].includes(memberData.dutyTitle)) {
@@ -1420,6 +2017,38 @@ fieldsModal.querySelector('.close-btn').addEventListener('click', () => fieldsMo
 addFieldForm.addEventListener('submit', handleAddFieldSubmit);
 document.getElementById('existing-fields-list').addEventListener('click', handleFieldListClick);
 
+// Field type change toggles validation/options sections
+document.getElementById('new-field-type').addEventListener('change', toggleFieldTypeOptions);
+
+// Add option button for dropdown/radio
+document.getElementById('add-option-btn').addEventListener('click', () => {
+    const list = document.getElementById('field-options-list');
+    const count = list.querySelectorAll('.field-option-input').length;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'field-option-input';
+    input.placeholder = `Option ${count + 1}`;
+    list.appendChild(input);
+});
+
+// Dependency field change
+document.getElementById('new-field-dep-field').addEventListener('change', (e) => {
+    const depValueInput = document.getElementById('new-field-dep-value');
+    depValueInput.disabled = !e.target.value;
+});
+
+// Add group button
+document.getElementById('add-group-btn').addEventListener('click', handleAddGroup);
+document.getElementById('field-groups-list').addEventListener('click', handleGroupsClick);
+
+// Role select
+document.getElementById('current-role-select').addEventListener('change', async (e) => {
+    await saveAccessRole(e.target.value);
+    updateRoleDescription();
+    applyRoleRestrictions();
+    await renderFieldManagerList();
+});
+
 detailedViewModal.querySelector('.close-btn').addEventListener('click', () => detailedViewModal.style.display = 'none');
 
 document.getElementById('sub-tab-nav').addEventListener('click', async (event) => {
@@ -1468,6 +2097,7 @@ TEAM_CONTAINERS.forEach(id => {
 });
 
 // --- INITIAL LOAD ---
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    CURRENT_ROLE = await getAccessRole();
     renderAll(true);
 });
