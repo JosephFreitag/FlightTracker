@@ -664,11 +664,12 @@ input:checked + .slider:before {
 .flight-tab-nav {
     display: flex;
     gap: 4px;
-    margin-bottom: 10px;
+    margin-bottom: 0;
     flex-wrap: wrap;
     align-items: center;
+    padding-bottom: 0;
 }
-.flight-tab {
+.flight-tab-nav button {
     padding: 10px 20px;
     cursor: pointer;
     background-color: #3B4048;
@@ -679,37 +680,36 @@ input:checked + .slider:before {
     font-weight: bold;
     border-radius: 8px 8px 0 0;
     transition: background-color 0.2s, color 0.2s;
+    font-family: inherit;
 }
-.flight-tab:hover {
+.flight-tab-nav button:hover {
     background-color: #4F555E;
     color: #ecf0f1;
 }
-.flight-tab.active {
+.flight-tab-nav button.active {
     background-color: #00A86B;
     color: #ffffff;
     border-color: #00A86B;
 }
-.add-flight-btn {
+.flight-tab-nav .add-flight-btn {
     padding: 10px 16px;
     font-size: 1.2em;
     font-weight: bold;
     background-color: transparent;
     border: 2px dashed #4F555E;
     color: #4F555E;
-    border-radius: 8px 8px 0 0;
-    cursor: pointer;
-    transition: all 0.2s;
 }
-.add-flight-btn:hover {
+.flight-tab-nav .add-flight-btn:hover {
     border-color: #00A86B;
     color: #00A86B;
+    background-color: transparent;
 }
-.unbilleted-tab {
+.flight-tab-nav .unbilleted-tab {
     margin-left: auto;
     background-color: #4F555E;
     border-color: #4F555E;
 }
-.unbilleted-tab.active {
+.flight-tab-nav .unbilleted-tab.active {
     background-color: #e67e22;
     border-color: #e67e22;
     color: #ffffff;
